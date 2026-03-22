@@ -24,8 +24,9 @@
     <div class="viewer-toolbar">
       <div class="viewer-label" id="file-label">3D Viewport</div>
       <div class="view-toggle">
-        <button class="toggle-btn active" id="btn-render" onclick="setView('render')">Render</button>
-        <button class="toggle-btn" id="btn-3d" onclick="setView('3d')">3D View</button>
+        <!-- FIX: removed inline onclick — wired in script.js -->
+        <button class="toggle-btn active" id="btn-render">Render</button>
+        <button class="toggle-btn" id="btn-3d">3D View</button>
       </div>
     </div>
 
@@ -65,37 +66,40 @@
   <div class="control-panel">
     <div class="panel-section">
       <div class="section-label">Model</div>
-      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+      <!-- FIX: removed onclick — upload-zone click is wired in script.js -->
+      <div class="upload-zone" id="upload-zone">
         <div class="upload-icon">📦</div>
         <div class="upload-text"><strong>Click to upload</strong> or drag & drop<br>.glb or .gltf file</div>
       </div>
-      <input type="file" id="file-input" accept=".glb,.gltf">
+      <!-- FIX: added display:none so it's truly hidden -->
+      <input type="file" id="file-input" accept=".glb,.gltf" style="display:none">
     </div>
 
     <div class="panel-section">
       <div class="section-label">Material Preset</div>
       <div class="presets-grid">
-        <button class="preset-btn" onclick="selectPreset(this, 'chrome metal, highly reflective, mirror finish')">
+        <!-- FIX: removed onclick="selectPreset(this,...)" — use data-prompt, wired in script.js -->
+        <button class="preset-btn" data-prompt="chrome metal, highly reflective, mirror finish">
           <div class="preset-swatch" style="background: linear-gradient(135deg, #e8e8e8, #a0a0a0)"></div>
           <div class="preset-name">Chrome</div>
         </button>
-        <button class="preset-btn" onclick="selectPreset(this, 'brushed steel metal, industrial')">
+        <button class="preset-btn" data-prompt="brushed steel metal, industrial">
           <div class="preset-swatch" style="background: linear-gradient(135deg, #b0b8c1, #7a8694)"></div>
           <div class="preset-name">Steel</div>
         </button>
-        <button class="preset-btn" onclick="selectPreset(this, 'polished gold, luxury metallic')">
+        <button class="preset-btn" data-prompt="polished gold, luxury metallic">
           <div class="preset-swatch" style="background: linear-gradient(135deg, #f5d060, #c8960c)"></div>
           <div class="preset-name">Gold</div>
         </button>
-        <button class="preset-btn" onclick="selectPreset(this, 'warm oak wood texture, natural grain')">
+        <button class="preset-btn" data-prompt="warm oak wood texture, natural grain">
           <div class="preset-swatch" style="background: linear-gradient(135deg, #c8956c, #9b6a3e)"></div>
           <div class="preset-name">Oak</div>
         </button>
-        <button class="preset-btn" onclick="selectPreset(this, 'dark walnut wood, rich deep grain')">
+        <button class="preset-btn" data-prompt="dark walnut wood, rich deep grain">
           <div class="preset-swatch" style="background: linear-gradient(135deg, #6b4c3b, #3d2b1f)"></div>
           <div class="preset-name">Walnut</div>
         </button>
-        <button class="preset-btn" onclick="selectPreset(this, 'soft linen fabric, matte texture')">
+        <button class="preset-btn" data-prompt="soft linen fabric, matte texture">
           <div class="preset-swatch" style="background: linear-gradient(135deg, #e8e0d4, #c8bfb0)"></div>
           <div class="preset-name">Linen</div>
         </button>
@@ -107,17 +111,19 @@
       <div class="prompt-area">
         <textarea class="prompt-input" id="prompt-input" placeholder="Describe the material or finish you want..."></textarea>
         <div class="prompt-suggestions">
-          <button class="suggestion" onclick="addSuggestion('glossy')">glossy</button>
-          <button class="suggestion" onclick="addSuggestion('worn')">worn</button>
-          <button class="suggestion" onclick="addSuggestion('matte black')">matte black</button>
-          <button class="suggestion" onclick="addSuggestion('glass')">glass</button>
-          <button class="suggestion" onclick="addSuggestion('ceramic')">ceramic</button>
+          <!-- FIX: removed onclick="addSuggestion(...)" — use data-suggestion, wired in script.js -->
+          <button class="suggestion" data-suggestion="glossy">glossy</button>
+          <button class="suggestion" data-suggestion="worn">worn</button>
+          <button class="suggestion" data-suggestion="matte black">matte black</button>
+          <button class="suggestion" data-suggestion="glass">glass</button>
+          <button class="suggestion" data-suggestion="ceramic">ceramic</button>
         </div>
       </div>
     </div>
 
     <div class="panel-section">
-      <button class="render-btn" id="render-btn" onclick="triggerRender()">Render</button>
+      <!-- FIX: removed onclick="triggerRender()" — wired in script.js -->
+      <button class="render-btn" id="render-btn">Render</button>
     </div>
 
     <div class="panel-section" id="result-section">
@@ -155,6 +161,15 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="app.js"></script>
+<!--
+  FIX: was <script src="app.js"> which 404'd.
+  Your actual file on disk must be named script.js — use that name here.
+  If you prefer to keep the filename app.js, rename app.js → script.js OR change this line back to app.js.
+  Scripts are at end of <body> so DOM is ready when they execute.
+-->
+<script src="script.js"></script>
 <script src="viewer.js"></script>
 <script src="compare.js"></script>
+
+</body>
+</html>

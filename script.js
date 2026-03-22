@@ -5,36 +5,98 @@ const API_URL = `https://api.runpod.ai/v2/${ENDPOINT_ID}`;
 let currentFile = null;
 let history = [];
 
-// File upload
-document.getElementById('file-input').addEventListener('change', function(e) {
-  const file = e.target.files[0];
-  if (!file) return;
+// ─────────────────────────────────────────────
+// DOM READY — wire up ALL event listeners here
+// so functions are guaranteed to exist first
+// ─────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+
+  // ── Upload zone click → open file picker ──
+  const uploadZone = document.getElementById('upload-zone');
+  const fileInput  = document.getElementById('file-input');
+
+  uploadZone.addEventListener('click', () => fileInput.click());   // FIX: was inline onclick
+
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    handleFile(file);
+  });
+
+  // ── Drag & drop ──
+  uploadZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadZone.style.borderColor = 'var(--text)';
+  });
+  uploadZone.addEventListener('dragleave', () => {
+    uploadZone.style.borderColor = '';
+  });
+  uploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadZone.style.borderColor = '';
+    const file = e.dataTransfer.files[0];
+    if (file && (file.name.endsWith('.glb') || file.name.endsWith('.gltf'))) {
+      handleFile(file);
+    }
+  });
+
+  // ── View toggle buttons ──
+  document.getElementById('btn-render').addEventListener('click', () => setView('render'));
+  document.getElementById('btn-3d').addEventListener('click',     () => setView('3d'));
+
+  // ── Material preset chips ──
+  // FIX: was onclick="selectPreset(this, '...')" inline — now uses data-prompt
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('prompt-input').value = btn.dataset.prompt;
+    });
+  });
+
+  // ── Suggestion chips ──
+  // FIX: was onclick="addSuggestion('...')" inline — now uses data-suggestion
+  document.querySelectorAll('.suggestion').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = document.getElementById('prompt-input');
+      const val = input.value.trim();
+      input.value = val ? val + ', ' + btn.dataset.suggestion : btn.dataset.suggestion;
+      input.focus();
+    });
+  });
+
+  // ── Render button ──
+  // FIX: was onclick="triggerRender()" inline
+  document.getElementById('render-btn').addEventListener('click', triggerRender);
+
+  // ── Cmd/Ctrl+Enter shortcut ──
+  document.getElementById('prompt-input').addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') triggerRender();
+  });
+
+  // ── Connection status check ──
+  checkConnection();
+});
+
+// ─────────────────────────────────────────────
+// File handling (shared by click + drop)
+// ─────────────────────────────────────────────
+function handleFile(file) {
   currentFile = file;
   const zone = document.getElementById('upload-zone');
   zone.classList.add('has-file');
-  zone.querySelector('.upload-text').innerHTML = `<strong>${file.name}</strong><br><span style="color:var(--text-muted)">Click to change</span>`;
+  zone.querySelector('.upload-text').innerHTML =
+    `<strong>${file.name}</strong><br><span style="color:var(--text-muted)">Click to change</span>`;
   document.getElementById('file-label').textContent = file.name;
+
   const url = URL.createObjectURL(file);
   document.getElementById('model-viewer').src = url;
   showToast('Model loaded: ' + file.name);
-});
+}
 
-// Drag and drop
-const zone = document.getElementById('upload-zone');
-zone.addEventListener('dragover', e => { e.preventDefault(); zone.style.borderColor = 'var(--text)'; });
-zone.addEventListener('dragleave', () => { zone.style.borderColor = ''; });
-zone.addEventListener('drop', e => {
-  e.preventDefault();
-  zone.style.borderColor = '';
-  const file = e.dataTransfer.files[0];
-  if (file && (file.name.endsWith('.glb') || file.name.endsWith('.gltf'))) {
-    const dt = new DataTransfer();
-    dt.items.add(file);
-    document.getElementById('file-input').files = dt.files;
-    document.getElementById('file-input').dispatchEvent(new Event('change'));
-  }
-});
-
+// ─────────────────────────────────────────────
+// View toggle
+// ─────────────────────────────────────────────
 function setView(view) {
   const rv = document.getElementById('render-view');
   const mv = document.getElementById('model-viewer');
@@ -45,28 +107,21 @@ function setView(view) {
   if (view === '3d') mv.style.flex = '1';
 }
 
-function selectPreset(btn, prompt) {
-  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('prompt-input').value = prompt;
-}
-
-function addSuggestion(text) {
-  const input = document.getElementById('prompt-input');
-  const val = input.value.trim();
-  input.value = val ? val + ', ' + text : text;
-  input.focus();
-}
-
+// ─────────────────────────────────────────────
+// File → base64
+// ─────────────────────────────────────────────
 async function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onload  = () => resolve(reader.result.split(',')[1]);
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
 }
 
+// ─────────────────────────────────────────────
+// Render
+// ─────────────────────────────────────────────
 async function triggerRender() {
   const prompt = document.getElementById('prompt-input').value.trim();
   if (!prompt) { showToast('Enter a prompt first'); return; }
@@ -77,22 +132,19 @@ async function triggerRender() {
   startLoading();
 
   try {
-    // Convert model to base64 if uploaded
     let model_base64 = null;
     if (currentFile) {
       model_base64 = await fileToBase64(currentFile);
     }
 
-    // Submit job to RunPod serverless
+    // Submit job
     const submitRes = await fetch(`${API_URL}/run`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${RUNPOD_API_KEY}`
       },
-      body: JSON.stringify({
-        input: { prompt, model_base64 }
-      })
+      body: JSON.stringify({ input: { prompt, model_base64 } })
     });
 
     const job = await submitRes.json();
@@ -116,7 +168,8 @@ async function triggerRender() {
         throw new Error('Render failed: ' + JSON.stringify(status));
       }
 
-      document.getElementById('render-status').textContent = `Running... ${Math.round((Date.now()-start)/1000)}s`;
+      document.getElementById('render-status').textContent =
+        `Running... ${Math.round((Date.now() - start) / 1000)}s`;
     }
 
     const elapsed = ((Date.now() - start) / 1000).toFixed(1);
@@ -138,6 +191,9 @@ async function triggerRender() {
   }
 }
 
+// ─────────────────────────────────────────────
+// Show result
+// ─────────────────────────────────────────────
 function showResult(imgUrl, prompt, time) {
   const prevSrc = document.getElementById('render-img').src;
 
@@ -166,6 +222,9 @@ function showResult(imgUrl, prompt, time) {
   showToast(`Done in ${time}s ⚡`);
 }
 
+// ─────────────────────────────────────────────
+// History
+// ─────────────────────────────────────────────
 function addHistory(prompt, imgUrl, time) {
   const list = document.getElementById('history-list');
   if (history.length === 0) list.innerHTML = '';
@@ -180,7 +239,7 @@ function addHistory(prompt, imgUrl, time) {
       <div class="history-time">${time}s · 128 samples</div>
     </div>
   `;
-  item.onclick = () => {
+  item.addEventListener('click', () => {
     document.querySelectorAll('.history-item').forEach(i => i.classList.remove('active'));
     item.classList.add('active');
     if (imgUrl) {
@@ -189,11 +248,14 @@ function addHistory(prompt, imgUrl, time) {
       document.getElementById('empty-viewer').style.display = 'none';
       setView('render');
     }
-  };
+  });
   document.querySelectorAll('.history-item').forEach(i => i.classList.remove('active'));
   list.prepend(item);
 }
 
+// ─────────────────────────────────────────────
+// Loading overlay
+// ─────────────────────────────────────────────
 const loadingSteps = [
   [10, 'Submitting to RunPod...'],
   [25, 'Waiting for GPU...'],
@@ -225,8 +287,10 @@ function stopLoading() {
   }, 400);
 }
 
-// Connection status
-document.addEventListener('DOMContentLoaded', async () => {
+// ─────────────────────────────────────────────
+// Connection check
+// ─────────────────────────────────────────────
+async function checkConnection() {
   try {
     const res = await fetch(`${API_URL}/health`, {
       headers: { 'Authorization': `Bearer ${RUNPOD_API_KEY}` }
@@ -238,12 +302,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch {
     document.getElementById('conn-label').textContent = 'Not connected';
   }
-});
+}
 
-document.getElementById('prompt-input').addEventListener('keydown', e => {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') triggerRender();
-});
-
+// ─────────────────────────────────────────────
+// Toast
+// ─────────────────────────────────────────────
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
