@@ -9,6 +9,9 @@ RUN apt-get update && apt-get install -y \
 
 RUN pip3 install runpod
 
+# Install numpy inside Blender's bundled Python
+RUN blender --background --python-expr "import subprocess, sys; subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'numpy'])"
+
 COPY handler.py /handler.py
 
 CMD ["python3", "-u", "/handler.py"]
