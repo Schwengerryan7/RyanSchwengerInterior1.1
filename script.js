@@ -1,6 +1,9 @@
-let currentView = 'render';
-let history = [];
+const RUNPOD_API_KEY = 'rpa_MA050B33NL0623L4WBSWBP0VU77CH9Y00FLWVGH1c6jr3d';
+const ENDPOINT_ID = '4qqf6weor3acy0';
+const API_URL = `https://api.runpod.ai/v2/${ENDPOINT_ID}`;
+
 let currentFile = null;
+let history = [];
 
 // File upload
 document.getElementById('file-input').addEventListener('change', function(e) {
@@ -33,7 +36,6 @@ zone.addEventListener('drop', e => {
 });
 
 function setView(view) {
-  currentView = view;
   const rv = document.getElementById('render-view');
   const mv = document.getElementById('model-viewer');
   document.getElementById('btn-render').classList.toggle('active', view === 'render');
@@ -56,11 +58,18 @@ function addSuggestion(text) {
   input.focus();
 }
 
+async function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 async function triggerRender() {
   const prompt = document.getElementById('prompt-input').value.trim();
-  const apiUrl = document.getElementById('api-url').value.trim();
   if (!prompt) { showToast('Enter a prompt first'); return; }
-  if (!apiUrl) { showToast('Enter API URL first'); return; }
 
   const btn = document.getElementById('render-btn');
   btn.disabled = true;
@@ -68,21 +77,60 @@ async function triggerRender() {
   startLoading();
 
   try {
-    const formData = new FormData();
-    formData.append('prompt', prompt);
-    if (currentFile) formData.append('model', currentFile);
+    // Convert model to base64 if uploaded
+    let model_base64 = null;
+    if (currentFile) {
+      model_base64 = await fileToBase64(currentFile);
+    }
 
+    // Submit job to RunPod serverless
+    const submitRes = await fetch(`${API_URL}/run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${RUNPOD_API_KEY}`
+      },
+      body: JSON.stringify({
+        input: { prompt, model_base64 }
+      })
+    });
+
+    const job = await submitRes.json();
+    const jobId = job.id;
+    showToast('Job submitted — waiting for GPU...');
+
+    // Poll for result
     const start = Date.now();
-    const res = await fetch(`${apiUrl}/render`, { method: 'POST', body: formData });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
+    let result = null;
+    while (true) {
+      await new Promise(r => setTimeout(r, 3000));
+      const statusRes = await fetch(`${API_URL}/status/${jobId}`, {
+        headers: { 'Authorization': `Bearer ${RUNPOD_API_KEY}` }
+      });
+      const status = await statusRes.json();
+
+      if (status.status === 'COMPLETED') {
+        result = status.output;
+        break;
+      } else if (status.status === 'FAILED') {
+        throw new Error('Render failed: ' + JSON.stringify(status));
+      }
+
+      document.getElementById('render-status').textContent = `Running... ${Math.round((Date.now()-start)/1000)}s`;
+    }
+
     const elapsed = ((Date.now() - start) / 1000).toFixed(1);
 
-    if (data.image_url) showResult(`${apiUrl}${data.image_url}`, prompt, elapsed);
-    if (data.glb_url) document.getElementById('model-viewer').src = `${apiUrl}${data.glb_url}`;
+    if (result && result.image_base64) {
+      const imgUrl = `data:image/png;base64,${result.image_base64}`;
+      showResult(imgUrl, prompt, elapsed);
+    } else {
+      throw new Error('No image returned');
+    }
 
   } catch (err) {
-    showToast('Could not reach API — is Flask running on RunPod?');
+    showToast('Error: ' + err.message);
+    console.error(err);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Render';
@@ -91,6 +139,8 @@ async function triggerRender() {
 }
 
 function showResult(imgUrl, prompt, time) {
+  const prevSrc = document.getElementById('render-img').src;
+
   const renderImg = document.getElementById('render-img');
   renderImg.src = imgUrl;
   renderImg.classList.add('visible');
@@ -108,14 +158,12 @@ function showResult(imgUrl, prompt, time) {
   dl.href = imgUrl;
   dl.classList.add('visible');
 
-  // Feed compare slider if we have a previous render
-  const prevImg = document.getElementById('render-img').src;
-  if (prevImg && prevImg !== imgUrl && window.updateCompare) {
-    window.updateCompare(prevImg, imgUrl);
+  if (prevSrc && prevSrc !== imgUrl && prevSrc !== window.location.href && window.updateCompare) {
+    window.updateCompare(prevSrc, imgUrl);
   }
 
   addHistory(prompt, imgUrl, time);
-  showToast(`Done in ${time}s`);
+  showToast(`Done in ${time}s ⚡`);
 }
 
 function addHistory(prompt, imgUrl, time) {
@@ -126,12 +174,10 @@ function addHistory(prompt, imgUrl, time) {
   const item = document.createElement('div');
   item.className = 'history-item active';
   item.innerHTML = `
-    <div class="history-thumb">
-      ${imgUrl ? `<img src="${imgUrl}">` : '🪑'}
-    </div>
+    <div class="history-thumb">${imgUrl ? `<img src="${imgUrl}">` : '🪑'}</div>
     <div class="history-info">
       <div class="history-prompt">${prompt}</div>
-      <div class="history-time">${time}s · 256 samples</div>
+      <div class="history-time">${time}s · 128 samples</div>
     </div>
   `;
   item.onclick = () => {
@@ -149,11 +195,12 @@ function addHistory(prompt, imgUrl, time) {
 }
 
 const loadingSteps = [
-  [15, 'Parsing prompt...'],
-  [30, 'Loading 3D scene...'],
-  [50, 'Applying materials...'],
-  [70, 'Rendering with Cycles...'],
-  [90, 'Saving output...'],
+  [10, 'Submitting to RunPod...'],
+  [25, 'Waiting for GPU...'],
+  [45, 'Loading 3D scene...'],
+  [65, 'Applying materials...'],
+  [80, 'Rendering with Cycles...'],
+  [95, 'Saving output...'],
 ];
 let loadingTimer;
 
@@ -166,7 +213,7 @@ function startLoading() {
       document.getElementById('render-status').textContent = loadingSteps[i][1];
       i++;
     }
-  }, 700);
+  }, 2000);
 }
 
 function stopLoading() {
@@ -178,24 +225,21 @@ function stopLoading() {
   }, 400);
 }
 
-// API health check
-document.getElementById('api-url').addEventListener('blur', async function() {
-  const url = this.value.trim();
-  if (!url) return;
+// Connection status
+document.addEventListener('DOMContentLoaded', async () => {
   try {
-    const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(3000) });
+    const res = await fetch(`${API_URL}/health`, {
+      headers: { 'Authorization': `Bearer ${RUNPOD_API_KEY}` }
+    });
     if (res.ok) {
       document.getElementById('conn-dot').classList.add('connected');
       document.getElementById('conn-label').textContent = 'Connected';
-      showToast('API connected ✓');
     }
   } catch {
-    document.getElementById('conn-dot').classList.remove('connected');
     document.getElementById('conn-label').textContent = 'Not connected';
   }
 });
 
-// Cmd+Enter to render
 document.getElementById('prompt-input').addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') triggerRender();
 });
