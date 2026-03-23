@@ -1,4 +1,4 @@
-const RUNPOD_API_KEY = 'rpa_MA050B33NL0623L4WBSWBP0VU77CH9Y00FLWVGH1c6jr3d';
+const RUNPOD_API_KEY = 'YOUR_NEW_KEY_HERE';
 const ENDPOINT_ID = '4qqf6weor3acy0';
 const API_URL = `https://api.runpod.ai/v2/${ENDPOINT_ID}`;
 
