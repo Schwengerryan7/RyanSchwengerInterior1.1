@@ -67,20 +67,34 @@ for obj in bpy.context.scene.objects:
         obj.data.materials.clear()
         obj.data.materials.append(mat)
 
-# Select all and move to origin
-bpy.ops.object.select_all(action="SELECT")
-bpy.ops.object.origin_set(type="ORIGIN_GEOMETRY", center="BOUNDS")
+# Get bounding box of all mesh objects
 mesh_objects = [o for o in bpy.context.scene.objects if o.type == "MESH"]
-if mesh_objects:
-    # Move everything to world center
-    for obj in mesh_objects:
-        obj.location = (0, 0, 0)
+all_corners = []
+for obj in mesh_objects:
+    for corner in obj.bound_box:
+        world_corner = obj.matrix_world @ Vector(corner)
+        all_corners.append(world_corner)
 
-# Camera using Blender's built-in frame_all
-bpy.ops.object.camera_add(location=(4, -4, 3))
-cam = bpy.context.object
-cam.rotation_euler = (1.1, 0, 0.785)
-bpy.context.scene.camera = cam
+if all_corners:
+    min_x = min(c.x for c in all_corners)
+    max_x = max(c.x for c in all_corners)
+    min_y = min(c.y for c in all_corners)
+    max_y = max(c.y for c in all_corners)
+    min_z = min(c.z for c in all_corners)
+    max_z = max(c.z for c in all_corners)
+    
+    center = Vector(((min_x+max_x)/2, (min_y+max_y)/2, (min_z+max_z)/2))
+    size = max(max_x-min_x, max_y-min_y, max_z-min_z)
+    dist = size * 2.2
+    
+    cam_loc = Vector((center.x + dist*0.6, center.y - dist, center.z + dist*0.5))
+    
+    bpy.ops.object.camera_add(location=cam_loc)
+    cam = bpy.context.object
+    direction = center - cam_loc
+    rot_quat = direction.to_track_quat("-Z", "Y")
+    cam.rotation_euler = rot_quat.to_euler()
+    bpy.context.scene.camera = cam
 
 # Lighting
 bpy.ops.object.light_add(type="SUN", location=(5, -5, 10))
