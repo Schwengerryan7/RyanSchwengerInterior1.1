@@ -22,6 +22,7 @@ def handler(job):
 
     blender_script = '''
 import bpy, json, os, math
+from mathutils import Vector
 
 with open("/tmp/input.json") as f:
     data = json.load(f)
@@ -66,44 +67,30 @@ for obj in bpy.context.scene.objects:
         obj.data.materials.clear()
         obj.data.materials.append(mat)
 
-# Auto-frame camera around the model
+# Select all and move to origin
+bpy.ops.object.select_all(action="SELECT")
+bpy.ops.object.origin_set(type="ORIGIN_GEOMETRY", center="BOUNDS")
 mesh_objects = [o for o in bpy.context.scene.objects if o.type == "MESH"]
 if mesh_objects:
-    min_x = min(o.location.x - max(o.dimensions)/2 for o in mesh_objects)
-    max_x = max(o.location.x + max(o.dimensions)/2 for o in mesh_objects)
-    min_y = min(o.location.y - max(o.dimensions)/2 for o in mesh_objects)
-    max_y = max(o.location.y + max(o.dimensions)/2 for o in mesh_objects)
-    min_z = min(o.location.z for o in mesh_objects)
-    max_z = max(o.location.z + max(o.dimensions) for o in mesh_objects)
-    
-    center_x = (min_x + max_x) / 2
-    center_y = (min_y + max_y) / 2
-    center_z = (min_z + max_z) / 2
-    size = max(max_x - min_x, max_y - min_y, max_z - min_z)
-    dist = size * 2.5
+    # Move everything to world center
+    for obj in mesh_objects:
+        obj.location = (0, 0, 0)
 
-    cam_x = center_x + dist * 0.7
-    cam_y = center_y - dist * 0.7
-    cam_z = center_z + dist * 0.5
-
-    bpy.ops.object.camera_add(location=(cam_x, cam_y, cam_z))
-    cam = bpy.context.object
-    dx = center_x - cam_x
-    dy = center_y - cam_y
-    dz = center_z - cam_z
-    cam.rotation_euler = (math.atan2(-dz, math.sqrt(dx**2+dy**2)), 0, math.atan2(dx, -dy))
-    bpy.context.scene.camera = cam
+# Camera using Blender's built-in frame_all
+bpy.ops.object.camera_add(location=(4, -4, 3))
+cam = bpy.context.object
+cam.rotation_euler = (1.1, 0, 0.785)
+bpy.context.scene.camera = cam
 
 # Lighting
 bpy.ops.object.light_add(type="SUN", location=(5, -5, 10))
 sun = bpy.context.object
 sun.data.energy = 3
-sun.rotation_euler = (0.785, 0, 0.785)
 
 bpy.ops.object.light_add(type="AREA", location=(-3, 3, 5))
 fill = bpy.context.object
-fill.data.energy = 500
-fill.data.size = 5
+fill.data.energy = 800
+fill.data.size = 6
 
 # Render
 scene = bpy.context.scene
