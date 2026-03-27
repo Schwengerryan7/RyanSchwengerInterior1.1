@@ -1,1 +1,846 @@
-pipeline.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spatial AI — Point Cloud Pipeline</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0e0e10;
+      --surface: #18181b;
+      --border: #27272a;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --text: #f4f4f5;
+      --text-muted: #71717a;
+      --success: #22c55e;
+      --error: #ef4444;
+      --step-inactive: #27272a;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 32px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; color: var(--text); }
+    .conn-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .conn-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--error);
+      transition: background 0.3s;
+    }
+    .conn-dot.connected { background: var(--success); }
+
+    /* ── Main layout ── */
+    main {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* ── Stage card ── */
+    .stage {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .stage.active { border-color: var(--accent); }
+    .stage.disabled { opacity: 0.4; pointer-events: none; }
+
+    .stage-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .stage-num {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--step-inactive);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; color: var(--text-muted);
+      flex-shrink: 0;
+      transition: background 0.2s, color 0.2s;
+    }
+    .stage.active .stage-num { background: var(--accent); color: #fff; }
+    .stage.done .stage-num { background: var(--success); color: #fff; }
+    .stage-title { font-size: 14px; font-weight: 600; }
+    .stage-subtitle { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+
+    .stage-body {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      min-height: 320px;
+    }
+
+    /* ── Controls panel ── */
+    .controls {
+      padding: 24px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* ── Viewer panel ── */
+    .viewer {
+      position: relative;
+      background: #0a0a0c;
+    }
+    .viewer canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+    }
+    .viewer-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .viewer-placeholder .icon { font-size: 32px; opacity: 0.3; }
+
+    /* ── Upload zone ── */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      padding: 24px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(99,102,241,0.05);
+    }
+    .upload-zone.has-file {
+      border-color: var(--success);
+      border-style: solid;
+    }
+    .upload-zone .upload-icon { font-size: 24px; margin-bottom: 8px; display: block; }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+      width: 100%;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-secondary:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Material presets ── */
+    .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+    .preset-chip {
+      padding: 5px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .preset-chip:hover { border-color: var(--accent); color: var(--accent); }
+    .preset-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    /* ── Progress bar ── */
+    .progress-wrap {
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      background: var(--accent);
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+
+    /* ── Status text ── */
+    .status-text { font-size: 11px; color: var(--text-muted); min-height: 16px; }
+
+    /* ── Result image ── */
+    .result-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: none;
+    }
+    .result-img.visible { display: block; }
+
+    /* ── Download link ── */
+    .download-btn {
+      display: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 12px;
+      text-decoration: none;
+      text-align: center;
+    }
+    .download-btn.visible { display: block; }
+    .download-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Label ── */
+    label { font-size: 11px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(16px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      white-space: nowrap;
+      z-index: 1000;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* ── Point count badge ── */
+    .info-badge {
+      font-size: 11px;
+      color: var(--text-muted);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 4px 8px;
+      display: none;
+    }
+    .info-badge.visible { display: block; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>SPATIAL AI — POINT CLOUD PIPELINE</h1>
+  <div class="conn-badge">
+    <span class="conn-dot" id="conn-dot"></span>
+    <span id="conn-label">Checking...</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── STAGE 1: Upload PLY ── -->
+  <div class="stage active" id="stage-1">
+    <div class="stage-header">
+      <div class="stage-num">1</div>
+      <div>
+        <div class="stage-title">Upload Point Cloud</div>
+      </div>
+      <div class="stage-subtitle" id="s1-subtitle">Upload a .ply file to begin</div>
+    </div>
+    <div class="stage-body">
+      <div class="controls">
+        <div>
+          <label>Point Cloud File</label>
+          <div style="margin-top: 8px;">
+            <div class="upload-zone" id="upload-zone">
+              <span class="upload-icon">☁</span>
+              <div>Drop .ply file here</div>
+              <div style="margin-top:4px;font-size:11px;">or click to browse</div>
+            </div>
+            <input type="file" id="file-input" accept=".ply" style="display:none">
+          </div>
+        </div>
+        <div class="info-badge" id="point-info"></div>
+        <button class="btn btn-primary" id="btn-next-1" disabled>
+          Continue to Mesh →
+        </button>
+      </div>
+      <div class="viewer" id="viewer-pointcloud">
+        <div class="viewer-placeholder" id="placeholder-1">
+          <div class="icon">⬡</div>
+          <div>Point cloud will appear here</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STAGE 2: Reconstruct Mesh ── -->
+  <div class="stage disabled" id="stage-2">
+    <div class="stage-header">
+      <div class="stage-num">2</div>
+      <div>
+        <div class="stage-title">Reconstruct Mesh</div>
+      </div>
+      <div class="stage-subtitle" id="s2-subtitle">Poisson surface reconstruction via Open3D</div>
+    </div>
+    <div class="stage-body">
+      <div class="controls">
+        <div>
+          <label>Reconstruction</label>
+          <div style="margin-top:8px;font-size:12px;color:var(--text-muted);line-height:1.6;">
+            Converts point cloud dots into a watertight 3D mesh using Poisson reconstruction.
+          </div>
+        </div>
+        <div class="progress-wrap"><div class="progress-bar" id="mesh-progress"></div></div>
+        <div class="status-text" id="mesh-status"></div>
+        <button class="btn btn-primary" id="btn-mesh">
+          Reconstruct Mesh
+        </button>
+        <button class="btn btn-secondary" id="btn-next-2" disabled>
+          Continue to Render →
+        </button>
+      </div>
+      <div class="viewer" id="viewer-mesh">
+        <div class="viewer-placeholder" id="placeholder-2">
+          <div class="icon">◈</div>
+          <div>Mesh will appear here after reconstruction</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STAGE 3: Render ── -->
+  <div class="stage disabled" id="stage-3">
+    <div class="stage-header">
+      <div class="stage-num">3</div>
+      <div>
+        <div class="stage-title">Apply Material & Render</div>
+      </div>
+      <div class="stage-subtitle">Blender Cycles photorealistic render</div>
+    </div>
+    <div class="stage-body">
+      <div class="controls">
+        <div>
+          <label>Material Preset</label>
+          <div class="presets" style="margin-top:8px;" id="presets">
+            <button class="preset-chip" data-prompt="polished chrome metal material, reflective, studio lighting">Chrome</button>
+            <button class="preset-chip" data-prompt="natural oak wood material, warm grain, matte finish">Oak Wood</button>
+            <button class="preset-chip" data-prompt="soft grey fabric upholstery, woven texture, matte">Fabric</button>
+            <button class="preset-chip" data-prompt="white marble material, subtle veining, polished">Marble</button>
+            <button class="preset-chip" data-prompt="matte black powder coated metal">Matte Black</button>
+            <button class="preset-chip" data-prompt="warm walnut wood, dark grain, satin finish">Walnut</button>
+            <button class="preset-chip" data-prompt="brushed stainless steel, satin finish">Steel</button>
+            <button class="preset-chip" data-prompt="terracotta clay, unglazed, matte earthy tone">Terracotta</button>
+          </div>
+        </div>
+        <div>
+          <label>Custom Prompt</label>
+          <textarea id="prompt-input" rows="3" style="
+            margin-top:8px; width:100%; background:var(--bg);
+            border:1px solid var(--border); border-radius:6px;
+            color:var(--text); font-size:12px; padding:8px;
+            resize:none; outline:none; font-family:inherit;
+          " placeholder="Describe the material..."></textarea>
+        </div>
+        <div class="progress-wrap"><div class="progress-bar" id="render-progress"></div></div>
+        <div class="status-text" id="render-status"></div>
+        <button class="btn btn-primary" id="btn-render">
+          Render with Blender
+        </button>
+      </div>
+      <div class="viewer" id="viewer-result">
+        <div class="viewer-placeholder" id="placeholder-3">
+          <div class="icon">✦</div>
+          <div>Photorealistic render will appear here</div>
+        </div>
+        <img class="result-img" id="result-img" alt="Render result">
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STAGE 4: Result ── -->
+  <div class="stage disabled" id="stage-4">
+    <div class="stage-header">
+      <div class="stage-num">4</div>
+      <div>
+        <div class="stage-title">Result</div>
+      </div>
+      <div class="stage-subtitle" id="s4-subtitle">—</div>
+    </div>
+    <div class="stage-body" style="grid-template-columns: 280px 1fr;">
+      <div class="controls">
+        <div class="status-text" id="result-info"></div>
+        <a class="download-btn" id="download-btn" download="render.png">⬇ Download PNG</a>
+        <button class="btn btn-secondary" id="btn-restart" style="margin-top:auto;">
+          ↺ Start Over
+        </button>
+      </div>
+      <div class="viewer" style="min-height:400px;">
+        <div class="viewer-placeholder" id="placeholder-4">
+          <div class="icon">✦</div>
+          <div>Final render will appear here</div>
+        </div>
+        <img class="result-img" id="final-img" alt="Final render">
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── Config ──
+const API_URL = 'https://cautious-journey-69jrr96g77642rpq4-3001.app.github.dev';
+const RUNPOD_API_KEY = 'YOUR_NEW_KEY_HERE';
+
+// ── State ──
+let plyFile = null;
+let meshBase64 = null;
+
+// ── Three.js scenes ──
+function makeScene(containerId, placeholderId) {
+  const container = document.getElementById(containerId);
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0a0c);
+
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
+  camera.position.set(0, 0.5, 2);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  const dir = new THREE.DirectionalLight(0xffffff, 1.2);
+  dir.position.set(2, 4, 2);
+  scene.add(dir);
+
+  // Grid
+  const grid = new THREE.GridHelper(4, 20, 0x222222, 0x1a1a1a);
+  scene.add(grid);
+
+  function resize() {
+    const w = container.clientWidth;
+    const h = container.clientHeight || 320;
+    renderer.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+
+  container.appendChild(renderer.domElement);
+  resize();
+  window.addEventListener('resize', resize);
+
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  return { scene, camera, controls, renderer };
+}
+
+const pcScene  = makeScene('viewer-pointcloud', 'placeholder-1');
+const mshScene = makeScene('viewer-mesh', 'placeholder-2');
+
+// ── Helpers ──
+function showToast(msg, duration = 3000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration);
+}
+
+function setStage(n) {
+  for (let i = 1; i <= 4; i++) {
+    const el = document.getElementById(`stage-${i}`);
+    el.classList.remove('active', 'disabled', 'done');
+    if (i < n) el.classList.add('done');
+    else if (i === n) el.classList.add('active');
+    else el.classList.add('disabled');
+  }
+}
+
+function fitCameraToObject(camera, controls, object) {
+  const box = new THREE.Box3().setFromObject(object);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+  camera.position.set(center.x, center.y + maxDim * 0.3, center.z + maxDim * 1.8);
+  controls.target.copy(center);
+  controls.update();
+}
+
+function setProgress(barId, pct) {
+  document.getElementById(barId).style.width = pct + '%';
+}
+
+function setStatus(id, msg) {
+  document.getElementById(id).textContent = msg;
+}
+
+// ── Stage 1: Upload PLY ──
+const uploadZone = document.getElementById('upload-zone');
+const fileInput  = document.getElementById('file-input');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (file) loadPLY(file);
+});
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.name.toLowerCase().endsWith('.ply')) loadPLY(file);
+  else showToast('Please drop a .ply file');
+});
+
+function loadPLY(file) {
+  plyFile = file;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const loader = new PLYLoader();
+    const geometry = loader.parse(e.target.result);
+    geometry.computeBoundingBox();
+
+    const pointCount = geometry.attributes.position.count;
+
+    // Clear previous
+    pcScene.scene.children
+      .filter(c => c.isPoints || c.isMesh)
+      .forEach(c => pcScene.scene.remove(c));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.008,
+      color: 0x6366f1,
+      sizeAttenuation: true,
+    });
+
+    // Use vertex colors if available
+    if (geometry.attributes.color) {
+      material.vertexColors = true;
+    }
+
+    const points = new THREE.Points(geometry, material);
+    pcScene.scene.add(points);
+    fitCameraToObject(pcScene.camera, pcScene.controls, points);
+
+    document.getElementById('placeholder-1').style.display = 'none';
+    uploadZone.classList.add('has-file');
+    uploadZone.innerHTML = `<span class="upload-icon">✓</span><strong>${file.name}</strong><div style="margin-top:4px;font-size:11px;">Click to change</div>`;
+
+    const info = document.getElementById('point-info');
+    info.textContent = `${pointCount.toLocaleString()} points`;
+    info.classList.add('visible');
+
+    document.getElementById('s1-subtitle').textContent = `${pointCount.toLocaleString()} points loaded`;
+    document.getElementById('btn-next-1').disabled = false;
+    showToast(`Loaded ${pointCount.toLocaleString()} points`);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+document.getElementById('btn-next-1').addEventListener('click', () => {
+  setStage(2);
+});
+
+// ── Stage 2: Reconstruct Mesh ──
+document.getElementById('btn-mesh').addEventListener('click', async () => {
+  if (!plyFile) return;
+
+  const btn = document.getElementById('btn-mesh');
+  btn.disabled = true;
+  btn.textContent = 'Reconstructing...';
+  setProgress('mesh-progress', 10);
+  setStatus('mesh-status', 'Uploading point cloud...');
+
+  try {
+    // Convert PLY to base64
+    const base64 = await fileToBase64(plyFile);
+    setProgress('mesh-progress', 25);
+    setStatus('mesh-status', 'Submitting to RunPod...');
+
+    const submitRes = await fetch(`${API_URL}/run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${RUNPOD_API_KEY}`
+      },
+      body: JSON.stringify({ input: { type: 'mesh', ply_base64: base64 } })
+    });
+
+    if (!submitRes.ok) throw new Error(`Submit failed: ${submitRes.status}`);
+    const job = await submitRes.json();
+    setProgress('mesh-progress', 40);
+    setStatus('mesh-status', 'Running Poisson reconstruction...');
+
+    // Poll
+    const result = await pollJob(job.id, 'mesh-progress', 'mesh-status', 40, 90);
+    setProgress('mesh-progress', 100);
+
+    if (result && result.mesh_base64) {
+      meshBase64 = result.mesh_base64;
+      await displayMesh(meshBase64);
+      setStatus('mesh-status', 'Mesh ready');
+      document.getElementById('btn-next-2').disabled = false;
+      document.getElementById('s2-subtitle').textContent = 'Reconstruction complete';
+      showToast('Mesh reconstructed successfully');
+    } else {
+      throw new Error('No mesh returned from server');
+    }
+
+  } catch (err) {
+    setStatus('mesh-status', 'Error: ' + err.message);
+    showToast('Mesh error: ' + err.message);
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Reconstruct Mesh';
+  }
+});
+
+async function displayMesh(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: 'model/gltf-binary' });
+  const url = URL.createObjectURL(blob);
+
+  return new Promise((resolve, reject) => {
+    const loader = new GLTFLoader();
+    loader.load(url, gltf => {
+      mshScene.scene.children
+        .filter(c => c.isGroup || c.isMesh)
+        .forEach(c => mshScene.scene.remove(c));
+
+      const model = gltf.scene;
+      model.traverse(child => {
+        if (child.isMesh) {
+          child.material = new THREE.MeshStandardMaterial({
+            color: 0x888888,
+            roughness: 0.6,
+            metalness: 0.1,
+            wireframe: false,
+          });
+        }
+      });
+
+      mshScene.scene.add(model);
+      fitCameraToObject(mshScene.camera, mshScene.controls, model);
+      document.getElementById('placeholder-2').style.display = 'none';
+      resolve();
+    }, undefined, reject);
+  });
+}
+
+document.getElementById('btn-next-2').addEventListener('click', () => {
+  setStage(3);
+});
+
+// ── Stage 3: Render ──
+document.querySelectorAll('.preset-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.preset-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    document.getElementById('prompt-input').value = chip.dataset.prompt;
+  });
+});
+
+document.getElementById('btn-render').addEventListener('click', async () => {
+  const prompt = document.getElementById('prompt-input').value.trim();
+  if (!prompt) { showToast('Select a material or enter a prompt'); return; }
+  if (!meshBase64) { showToast('No mesh available — complete stage 2 first'); return; }
+
+  const btn = document.getElementById('btn-render');
+  btn.disabled = true;
+  btn.textContent = 'Rendering...';
+  setProgress('render-progress', 10);
+  setStatus('render-status', 'Submitting to Blender...');
+
+  try {
+    const submitRes = await fetch(`${API_URL}/run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${RUNPOD_API_KEY}`
+      },
+      body: JSON.stringify({ input: { prompt, model_base64: meshBase64 } })
+    });
+
+    if (!submitRes.ok) throw new Error(`Submit failed: ${submitRes.status}`);
+    const job = await submitRes.json();
+    setProgress('render-progress', 20);
+    setStatus('render-status', 'Waiting for GPU...');
+
+    const result = await pollJob(job.id, 'render-progress', 'render-status', 20, 95);
+    setProgress('render-progress', 100);
+
+    if (result && result.image_base64) {
+      const imgUrl = `data:image/png;base64,${result.image_base64}`;
+      document.getElementById('result-img').src = imgUrl;
+      document.getElementById('result-img').classList.add('visible');
+      document.getElementById('placeholder-3').style.display = 'none';
+      showFinalResult(imgUrl, prompt);
+    } else {
+      throw new Error('No image returned');
+    }
+
+  } catch (err) {
+    setStatus('render-status', 'Error: ' + err.message);
+    showToast('Render error: ' + err.message);
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Render with Blender';
+  }
+});
+
+// ── Stage 4: Final result ──
+function showFinalResult(imgUrl, prompt) {
+  setStage(4);
+  document.getElementById('final-img').src = imgUrl;
+  document.getElementById('final-img').classList.add('visible');
+  document.getElementById('placeholder-4').style.display = 'none';
+  document.getElementById('result-info').textContent = `Material: ${prompt.slice(0, 60)}...`;
+  const dl = document.getElementById('download-btn');
+  dl.href = imgUrl;
+  dl.classList.add('visible');
+  document.getElementById('s4-subtitle').textContent = 'Render complete';
+  showToast('Render complete!');
+}
+
+document.getElementById('btn-restart').addEventListener('click', () => {
+  plyFile = null;
+  meshBase64 = null;
+  setStage(1);
+  // Reset upload zone
+  uploadZone.classList.remove('has-file');
+  uploadZone.innerHTML = `<span class="upload-icon">☁</span><div>Drop .ply file here</div><div style="margin-top:4px;font-size:11px;">or click to browse</div>`;
+  document.getElementById('point-info').classList.remove('visible');
+  document.getElementById('btn-next-1').disabled = true;
+  document.getElementById('btn-next-2').disabled = true;
+  document.getElementById('result-img').classList.remove('visible');
+  document.getElementById('final-img').classList.remove('visible');
+  document.getElementById('download-btn').classList.remove('visible');
+  document.getElementById('placeholder-1').style.display = '';
+  document.getElementById('placeholder-4').style.display = '';
+  setProgress('mesh-progress', 0);
+  setProgress('render-progress', 0);
+  setStatus('mesh-status', '');
+  setStatus('render-status', '');
+});
+
+// ── Shared: poll job ──
+async function pollJob(jobId, progressBarId, statusId, startPct, endPct) {
+  const start = Date.now();
+  let pct = startPct;
+  const step = (endPct - startPct) / 15;
+
+  while (true) {
+    await new Promise(r => setTimeout(r, 3000));
+    const res = await fetch(`${API_URL}/status/${jobId}`, {
+      headers: { 'Authorization': `Bearer ${RUNPOD_API_KEY}` }
+    });
+    const status = await res.json();
+    const elapsed = Math.round((Date.now() - start) / 1000);
+    setStatus(statusId, `Running... ${elapsed}s`);
+    pct = Math.min(pct + step, endPct);
+    setProgress(progressBarId, Math.round(pct));
+
+    if (status.status === 'COMPLETED') return status.output;
+    if (status.status === 'FAILED') throw new Error('Job failed: ' + JSON.stringify(status.error));
+  }
+}
+
+// ── File to base64 ──
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ── Connection check ──
+async function checkConnection() {
+  try {
+    const res = await fetch(`${API_URL}/health`, {
+      headers: { 'Authorization': `Bearer ${RUNPOD_API_KEY}` }
+    });
+    if (res.ok) {
+      document.getElementById('conn-dot').classList.add('connected');
+      document.getElementById('conn-label').textContent = 'Connected';
+    }
+  } catch {
+    document.getElementById('conn-label').textContent = 'Offline';
+  }
+}
+
+checkConnection();
+</script>
+</body>
+</html>
