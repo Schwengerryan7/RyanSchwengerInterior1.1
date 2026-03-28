@@ -3,7 +3,6 @@
   import base64
   import os
   import json
-  import numpy as np
                                                                                                                                                        
   def handler(job):
       job_input = job["input"]                                                                                                                         
