@@ -1,1 +1,471 @@
-pipeline.html
+  <!DOCTYPE html>                                                                                                                                      
+  <html lang="en">                                                                                                                                     
+  <head>                                                                                                                                               
+  <meta charset="UTF-8">                                                                                                                               
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">                                                                               
+  <title>Point Cloud Pipeline</title>                                                                                                                  
+  <style>                                                                                                                                              
+    * { box-sizing: border-box; margin: 0; padding: 0; }                                                                                               
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;                                                                          
+      background: #0f0f0f;                                                                                                                             
+      color: #e0e0e0;                                                                                                                                  
+      min-height: 100vh;                                                                                                                               
+      display: flex;                                                                                                                                   
+      flex-direction: column;                                                                                                                          
+      align-items: center;                                                                                                                             
+      padding: 40px 20px;
+    }
+    h1 { font-size: 1.6rem; font-weight: 600; margin-bottom: 8px; }                                                                                    
+    .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 40px; }                                                                                 
+                                                                                                                                                       
+    .card {                                                                                                                                            
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;                                                                                                                       
+      border-radius: 16px;
+      padding: 28px;
+      width: 100%;                                                                                                                                     
+      max-width: 620px;
+      margin-bottom: 20px;                                                                                                                             
+    }             
+    .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 18px; color: #ccc; }
+                                                                                                                                                       
+    /* Upload zone */                                                                                                                                  
+    #drop-zone {                                                                                                                                       
+      border: 2px dashed #333;                                                                                                                         
+      border-radius: 12px;
+      padding: 40px 20px;
+      text-align: center;                                                                                                                              
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;                                                                                                  
+    }             
+    #drop-zone:hover, #drop-zone.drag { border-color: #888; background: #222; }
+    #drop-zone.loaded { border-color: #4ade80; border-style: solid; }                                                                                  
+    #drop-zone .icon { font-size: 2.5rem; margin-bottom: 10px; }                                                                                       
+    #drop-zone .label { color: #999; font-size: 0.9rem; }                                                                                              
+    #drop-zone .filename { color: #4ade80; font-size: 0.95rem; font-weight: 500; }                                                                     
+    #file-input { display: none; }                                                                                                                     
+                                                                                                                                                       
+    /* Material presets */
+    .presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }                                                                        
+    .preset-btn {                                                                                                                                      
+      padding: 6px 14px;
+      border-radius: 20px;                                                                                                                             
+      border: 1px solid #333;                                                                                                                          
+      background: transparent;
+      color: #bbb;                                                                                                                                     
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .preset-btn:hover { border-color: #666; color: #fff; }
+    .preset-btn.active { background: #fff; color: #000; border-color: #fff; }                                                                          
+   
+    textarea {                                                                                                                                         
+      width: 100%;
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      color: #e0e0e0;
+      font-size: 0.9rem;                                                                                                                               
+      padding: 12px 14px;
+      resize: none;                                                                                                                                    
+      height: 80px;
+      outline: none;                                                                                                                                   
+    }
+    textarea:focus { border-color: #444; }                                                                                                             
+                  
+    /* Pipeline button */
+    #run-btn {
+      width: 100%;
+      padding: 14px;
+      margin-top: 14px;
+      background: #fff;
+      color: #000;                                                                                                                                     
+      border: none;
+      border-radius: 10px;                                                                                                                             
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;                                                                                                                                 
+      transition: opacity 0.2s;
+    }                                                                                                                                                  
+    #run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Steps progress */                                                                                                                               
+    .steps { display: flex; flex-direction: column; gap: 14px; }
+    .step {                                                                                                                                            
+      display: flex;
+      align-items: center;                                                                                                                             
+      gap: 14px;
+      opacity: 0.35;                                                                                                                                   
+      transition: opacity 0.3s;
+    }
+    .step.active { opacity: 1; }
+    .step.done { opacity: 0.6; }                                                                                                                       
+    .step-circle {
+      width: 32px; height: 32px;                                                                                                                       
+      border-radius: 50%;                                                                                                                              
+      border: 2px solid #444;
+      display: flex; align-items: center; justify-content: center;                                                                                     
+      font-size: 0.8rem;
+      font-weight: 700;                                                                                                                                
+      flex-shrink: 0;
+      transition: all 0.3s;                                                                                                                            
+    }                                                                                                                                                  
+    .step.active .step-circle { border-color: #facc15; color: #facc15; }
+    .step.done .step-circle { border-color: #4ade80; background: #4ade80; color: #000; }                                                               
+    .step-info { flex: 1; }                                                                                                                            
+    .step-title { font-size: 0.9rem; font-weight: 600; }                                                                                               
+    .step-detail { font-size: 0.78rem; color: #666; margin-top: 2px; }                                                                                 
+    .step.active .step-detail { color: #facc15; }                                                                                                      
+    .step.done .step-detail { color: #4ade80; }                                                                                                        
+                                                                                                                                                       
+    /* Progress bar */                                                                                                                                 
+    .progress-wrap {
+      height: 3px;                                                                                                                                     
+      background: #222;
+      border-radius: 99px;                                                                                                                             
+      margin-top: 8px;                                                                                                                                 
+      overflow: hidden;
+      display: none;                                                                                                                                   
+    }             
+    .step.active .progress-wrap { display: block; }
+    .progress-bar {                                                                                                                                    
+      height: 100%;
+      background: #facc15;                                                                                                                             
+      border-radius: 99px;                                                                                                                             
+      width: 0%;
+      transition: width 2s ease;                                                                                                                       
+    }             
+
+    /* Result */                                                                                                                                       
+    #result-card { display: none; }
+    #result-img {                                                                                                                                      
+      width: 100%;                                                                                                                                     
+      border-radius: 10px;
+      display: block;                                                                                                                                  
+    }             
+    .result-meta {
+      display: flex;                                                                                                                                   
+      justify-content: space-between;
+      margin-top: 12px;                                                                                                                                
+      font-size: 0.82rem;
+      color: #666;
+    }                                                                                                                                                  
+    #download-btn {
+      display: inline-block;                                                                                                                           
+      margin-top: 14px;
+      padding: 10px 20px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;                                                                                                                              
+      color: #e0e0e0;
+      text-decoration: none;                                                                                                                           
+      font-size: 0.85rem;
+      transition: border-color 0.2s;
+    }
+    #download-btn:hover { border-color: #666; }
+
+    /* Error */                                                                                                                                        
+    #error-box {
+      display: none;                                                                                                                                   
+      background: #1f0909;
+      border: 1px solid #7f1d1d;
+      border-radius: 10px;                                                                                                                             
+      padding: 14px;
+      font-size: 0.82rem;                                                                                                                              
+      color: #fca5a5;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: 14px;
+    }                                                                                                                                                  
+   
+    /* Connection dot */                                                                                                                               
+    .conn-row {   
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.78rem; color: #555; margin-bottom: 24px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #444; }
+    .dot.connected { background: #4ade80; }
+  </style>                                                                                                                                             
+  </head>
+  <body>                                                                                                                                               
+                  
+  <h1>Point Cloud → Render</h1>
+  <p class="subtitle">Upload a .ply file, pick a material, get a photorealistic render</p>
+                                                                                                                                                       
+  <div class="conn-row">                                                                                                                               
+    <div class="dot" id="conn-dot"></div>                                                                                                              
+    <span id="conn-label">Checking connection...</span>                                                                                                
+  </div>                                                                                                                                               
+   
+  <!-- Step 1: Upload -->                                                                                                                              
+  <div class="card">
+    <h2>1 — Upload Point Cloud</h2>
+    <div id="drop-zone">                                                                                                                               
+      <div class="icon">☁️ </div>
+      <div class="label" id="drop-label">Drop your <strong>.ply</strong> file here or click to browse</div>                                            
+      <input type="file" id="file-input" accept=".ply">                                                                                                
+    </div>                                                                                                                                             
+  </div>                                                                                                                                               
+                  
+  <!-- Step 2: Material -->                                                                                                                            
+  <div class="card">
+    <h2>2 — Choose Material</h2>                                                                                                                       
+    <div class="presets">
+      <button class="preset-btn" data-prompt="chrome metal finish">Chrome</button>
+      <button class="preset-btn" data-prompt="brushed steel metal">Steel</button>                                                                      
+      <button class="preset-btn" data-prompt="warm oak wood">Oak Wood</button>                                                                         
+      <button class="preset-btn" data-prompt="dark walnut wood">Walnut</button>                                                                        
+      <button class="preset-btn" data-prompt="white linen fabric">Linen</button>                                                                       
+      <button class="preset-btn" data-prompt="leather upholstery dark brown">Leather</button>                                                          
+      <button class="preset-btn" data-prompt="white marble smooth">Marble</button>                                                                     
+      <button class="preset-btn" data-prompt="matte terracotta clay">Terracotta</button>                                                               
+    </div>                                                                                                                                             
+    <textarea id="prompt-input" placeholder="Describe the material (e.g. brushed gold metal, rough concrete)"></textarea>
+    <button id="run-btn">Run Pipeline</button>                                                                                                         
+    <div id="error-box"></div>
+  </div>                                                                                                                                               
+                  
+  <!-- Progress -->
+  <div class="card" id="progress-card" style="display:none">
+    <h2>Pipeline Progress</h2>
+    <div class="steps">
+      <div class="step" id="step-mesh">
+        <div class="step-circle">1</div>
+        <div class="step-info">                                                                                                                        
+          <div class="step-title">Mesh Reconstruction</div>
+          <div class="step-detail" id="step-mesh-detail">PLY → Poisson surface → GLB</div>                                                             
+          <div class="progress-wrap"><div class="progress-bar" id="bar-mesh"></div></div>                                                              
+        </div>                                                                                                                                         
+      </div>                                                                                                                                           
+      <div class="step" id="step-render">                                                                                                              
+        <div class="step-circle">✓</div>
+        <div class="step-info">
+          <div class="step-title">Blender Render</div>
+          <div class="step-detail" id="step-render-detail">GLB + material → Cycles PNG</div>
+          <div class="progress-wrap"><div class="progress-bar" id="bar-render"></div></div>                                                            
+        </div>
+      </div>                                                                                                                                           
+    </div>        
+  </div>
+                                                                                                                                                       
+  <!-- Result -->
+  <div class="card" id="result-card">                                                                                                                  
+    <h2>Result</h2>
+    <img id="result-img" alt="Render output">
+    <div class="result-meta">                                                                                                                          
+      <span id="result-prompt"></span>
+      <span id="result-time"></span>                                                                                                                   
+    </div>        
+    <a id="download-btn" download="render.png">Download PNG</a>                                                                                        
+  </div>
+                                                                                                                                                       
+  <script>        
+  const API_URL = 'https://cautious-journey-69jrr96g77642rpq4-3001.app.github.dev';                                                                    
+  const RUNPOD_API_KEY = 'YOUR_NEW_KEY_HERE';                                                                                                          
+   
+  let plyFile = null;                                                                                                                                  
+                  
+  // ── Connection check ──                                                                                                                            
+  async function checkConnection() {
+    try {                                                                                                                                              
+      const res = await fetch(`${API_URL}/health`);
+      if (res.ok) {                                                                                                                                    
+        document.getElementById('conn-dot').classList.add('connected');
+        document.getElementById('conn-label').textContent = 'Proxy connected';                                                                         
+      } else {                                                                                                                                         
+        document.getElementById('conn-label').textContent = 'Proxy error';
+      }                                                                                                                                                
+    } catch {     
+      document.getElementById('conn-label').textContent = 'Not connected — is proxy running?';
+    }                                                                                                                                                  
+  }
+                                                                                                                                                       
+  // ── File upload ──
+  const dropZone = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('file-input');                                                                                             
+   
+  dropZone.addEventListener('click', () => fileInput.click());                                                                                         
+  fileInput.addEventListener('change', e => loadFile(e.target.files[0]));
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });                                                 
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));                                                                     
+  dropZone.addEventListener('drop', e => {                                                                                                             
+    e.preventDefault();                                                                                                                                
+    dropZone.classList.remove('drag');
+    const f = e.dataTransfer.files[0];                                                                                                                 
+    if (f && f.name.endsWith('.ply')) loadFile(f);
+  });                                                                                                                                                  
+   
+  function loadFile(file) {                                                                                                                            
+    if (!file || !file.name.endsWith('.ply')) return;
+    plyFile = file;                                                                                                                                    
+    dropZone.classList.add('loaded');
+    document.getElementById('drop-label').innerHTML =                                                                                                  
+      `<span class="filename">✓ ${file.name}</span><br><span style="color:#555;font-size:0.8rem">Click to change</span>`;
+  }                                                                                                                                                    
+                  
+  // ── Preset chips ──                                                                                                                                
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {                                                                                                              
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');                                                                                                                     
+      document.getElementById('prompt-input').value = btn.dataset.prompt;                                                                              
+    });
+  });                                                                                                                                                  
+                  
+  // ── File → base64 ──                                                                                                                               
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {                                                                                                          
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;                                                                                                                         
+      reader.readAsDataURL(file);
+    });                                                                                                                                                
+  }               
+
+  // ── Poll job until complete ──                                                                                                                     
+  async function pollJob(jobId, barEl, detailEl, labelPrefix) {
+    const start = Date.now();                                                                                                                          
+    let pct = 10; 
+    barEl.style.width = pct + '%';                                                                                                                     
+                  
+    while (true) {
+      await new Promise(r => setTimeout(r, 3000));
+      const res = await fetch(`${API_URL}/status/${jobId}`, {                                                                                          
+        headers: { 'Authorization': `Bearer ${RUNPOD_API_KEY}` }
+      });                                                                                                                                              
+      const data = await res.json();
+      const elapsed = Math.round((Date.now() - start) / 1000);                                                                                         
+      detailEl.textContent = `${labelPrefix} — ${elapsed}s`;
+                                                                                                                                                       
+      pct = Math.min(pct + 12, 90);                                                                                                                    
+      barEl.style.width = pct + '%';                                                                                                                   
+                                                                                                                                                       
+      if (data.status === 'COMPLETED') {
+        barEl.style.width = '100%';
+        return data.output;                                                                                                                            
+      }
+      if (data.status === 'FAILED') {                                                                                                                  
+        throw new Error('Job failed: ' + JSON.stringify(data).slice(0, 500));
+      }                                                                                                                                                
+    }
+  }                                                                                                                                                    
+                  
+  // ── Submit job ──
+  async function submitJob(payload) {
+    const res = await fetch(`${API_URL}/run`, {                                                                                                        
+      method: 'POST',
+      headers: {                                                                                                                                       
+        'Content-Type': 'application/json',                                                                                                            
+        'Authorization': `Bearer ${RUNPOD_API_KEY}`
+      },                                                                                                                                               
+      body: JSON.stringify({ input: payload })
+    });
+    if (!res.ok) throw new Error(`Submit failed ${res.status}: ${await res.text()}`);
+    const data = await res.json();                                                                                                                     
+    if (!data.id) throw new Error('No job ID returned: ' + JSON.stringify(data));                                                                      
+    return data.id;                                                                                                                                    
+  }                                                                                                                                                    
+                  
+  // ── Main pipeline ──                                                                                                                               
+  document.getElementById('run-btn').addEventListener('click', async () => {
+    const prompt = document.getElementById('prompt-input').value.trim();
+    if (!plyFile) { showError('Please upload a .ply file first.'); return; }                                                                           
+    if (!prompt) { showError('Please enter a material description.'); return; }                                                                        
+                                                                                                                                                       
+    const btn = document.getElementById('run-btn');                                                                                                    
+    btn.disabled = true;
+    btn.textContent = 'Running...';                                                                                                                    
+    hideError();
+                                                                                                                                                       
+    const totalStart = Date.now();
+
+    document.getElementById('progress-card').style.display = 'block';                                                                                  
+    document.getElementById('result-card').style.display = 'none';
+                                                                                                                                                       
+    const stepMesh = document.getElementById('step-mesh');                                                                                             
+    const stepRender = document.getElementById('step-render');
+    const meshDetail = document.getElementById('step-mesh-detail');                                                                                    
+    const renderDetail = document.getElementById('step-render-detail');
+    const barMesh = document.getElementById('bar-mesh');                                                                                               
+    const barRender = document.getElementById('bar-render');
+                                                                                                                                                       
+    // Reset steps
+    stepMesh.className = 'step';
+    stepRender.className = 'step';                                                                                                                     
+   
+    try {                                                                                                                                              
+      // ── Step 1: Mesh ──
+      stepMesh.classList.add('active');
+      meshDetail.textContent = 'Reading file...';
+      const plyB64 = await fileToBase64(plyFile);
+                                                                                                                                                       
+      meshDetail.textContent = 'Submitting to RunPod...';
+      const meshJobId = await submitJob({ type: 'mesh', ply_base64: plyB64 });                                                                         
+                                                                                                                                                       
+      meshDetail.textContent = 'Reconstructing surface...';                                                                                            
+      const meshResult = await pollJob(meshJobId, barMesh, meshDetail, 'Reconstructing');                                                              
+                                                                                                                                                       
+      if (!meshResult || meshResult.status === 'error') {
+        throw new Error('Mesh failed: ' + (meshResult?.log || 'unknown'));                                                                             
+      }                                                                                                                                                
+      const meshB64 = meshResult.mesh_base64;
+      stepMesh.classList.remove('active');                                                                                                             
+      stepMesh.classList.add('done');
+      stepMesh.querySelector('.step-circle').textContent = '✓';                                                                                        
+      meshDetail.textContent = 'Mesh ready ✓';
+                                                                                                                                                       
+      // ── Step 2: Render ──
+      stepRender.classList.add('active');                                                                                                              
+      renderDetail.textContent = 'Submitting render job...';
+      const renderJobId = await submitJob({ type: 'render', model_base64: meshB64, prompt });                                                          
+   
+      renderDetail.textContent = 'Rendering with Cycles...';                                                                                           
+      const renderResult = await pollJob(renderJobId, barRender, renderDetail, 'Rendering');
+                                                                                                                                                       
+      if (!renderResult || renderResult.status === 'error') {                                                                                          
+        throw new Error('Render failed: ' + (renderResult?.log || 'unknown'));
+      }                                                                                                                                                
+                  
+      stepRender.classList.remove('active');
+      stepRender.classList.add('done');
+      stepRender.querySelector('.step-circle').textContent = '✓';                                                                                      
+   
+      const totalTime = ((Date.now() - totalStart) / 1000).toFixed(1);                                                                                 
+      renderDetail.textContent = `Done in ${totalTime}s ✓`;
+                                                                                                                                                       
+      // ── Show result ──
+      const imgUrl = `data:image/png;base64,${renderResult.image_base64}`;
+      document.getElementById('result-img').src = imgUrl;                                                                                              
+      document.getElementById('result-prompt').textContent = prompt;                                                                                   
+      document.getElementById('result-time').textContent = `${totalTime}s total`;                                                                      
+      const dl = document.getElementById('download-btn');                                                                                              
+      dl.href = imgUrl;                                                                                                                                
+      dl.download = `render_${prompt.replace(/\s+/g, '_').slice(0, 30)}.png`;
+      document.getElementById('result-card').style.display = 'block';                                                                                  
+                  
+    } catch (err) {                                                                                                                                    
+      showError(err.message);
+      console.error(err);                                                                                                                              
+    } finally {
+      btn.disabled = false;                                                                                                                            
+      btn.textContent = 'Run Pipeline';
+    }
+  });
+                                                                                                                                                       
+  function showError(msg) {
+    const box = document.getElementById('error-box');                                                                                                  
+    box.style.display = 'block';
+    box.textContent = msg;
+  }                                                                                                                                                    
+  function hideError() {
+    document.getElementById('error-box').style.display = 'none';                                                                                       
+  }               
+
+  checkConnection();                                                                                                                                   
+  </script>
+  </body>                                                                                                                                              
+  </html>  
