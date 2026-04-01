@@ -1,9 +1,8 @@
-                                                                                                                                                       
-  import runpod   
-  import subprocess                                                                                                                                    
-  import base64
-  import os                                                                                                                                            
-  import json     
+import runpod   
+import subprocess                                                                                                                                    
+import base64   
+import os
+import json  
 
   def handler(job):                                                                                                                                    
       job_input = job["input"]
