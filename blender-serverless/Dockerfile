@@ -15,7 +15,7 @@
       ln -s /opt/blender/blender /usr/local/bin/blender && \
       rm /tmp/blender.tar.xz                                                                                                          
    
-  RUN pip3 install runpod==1.7.3 numpy open3d                                                                                         
+  RUN pip3 install runpod==1.7.3 numpy open3d pillow                                                                                        
                   
   COPY handler.py /handler.py
 
