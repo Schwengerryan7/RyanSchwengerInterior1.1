@@ -5,7 +5,7 @@
                                                                                                                                       
   RUN apt-get update && apt-get install -y \
       python3 python3-pip wget xz-utils \
-      libgl1 libglib2.0-0 libgomp1 libxi6 libxrender1 libxxf86vm1 \                                                                   
+      libgl1 libglib2.0-0 libgomp1 libxi6 libxrender1 libxxf86vm1 libxkbcommon0 \                                                                   
       && rm -rf /var/lib/apt/lists/*                                                                                                  
                                                                                                                                       
   RUN wget https://download.blender.org/release/Blender3.6/blender-3.6.8-linux-x64.tar.xz -O /tmp/blender.tar.xz && \                 
