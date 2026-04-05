@@ -189,9 +189,9 @@ try:
         d.use = True                                                                                                                
 except Exception as e:                                                                                                              
     print("GPU setup failed, falling back to CPU:", e)
-scene.cycles.samples = 32                                                                                                           
-scene.render.resolution_x = 512
-scene.render.resolution_y = 512                                                                                                     
+scene.cycles.samples = 8                                                                                                           
+scene.render.resolution_x = 256
+scene.render.resolution_y = 256                                                                                                     
 scene.render.image_settings.file_format = "PNG"
 scene.render.filepath = os.path.join(data["output_path"], "render.png")                                                             
 bpy.ops.render.render(write_still=True)
