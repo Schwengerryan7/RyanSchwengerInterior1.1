@@ -1,9 +1,9 @@
- import runpod                                                                                                                       
+     import runpod
   import subprocess                                                                                                                   
-  import base64
+  import base64                                                                                                                       
   import os                                                                                                                           
-  import json
-                                                                                                                                      
+  import json     
+
   def handler(job):
       job_input = job["input"]
       job_type = job_input.get("type", "render")                                                                                      
@@ -11,15 +11,15 @@
       if job_type == "mesh":                                                                                                          
           return handle_mesh(job_input)
       else:                                                                                                                           
-          return handle_render(job_input)
-
+          return handle_render(job_input)                                                                                             
+   
   def handle_mesh(job_input):                                                                                                         
       import numpy as np
-      import open3d as o3d                                                                                                            
-                  
-      ply_b64 = job_input.get("ply_base64")                                                                                           
-      if not ply_b64:
-          return {"status": "error", "message": "ply_base64 is required"}                                                             
+      import open3d as o3d
+                                                                                                                                      
+      ply_b64 = job_input.get("ply_base64")
+      if not ply_b64:                                                                                                                 
+          return {"status": "error", "message": "ply_base64 is required"}
                                                                                                                                       
       ply_path = "/tmp/input.ply"
       with open(ply_path, "wb") as f:                                                                                                 
@@ -45,42 +45,42 @@
       convert_script = f"""
   import bpy                                                                                                                          
   bpy.ops.wm.read_factory_settings(use_empty=True)
-  bpy.ops.import_mesh.ply(filepath="{recon_ply}")                                                                                     
-  bpy.ops.export_scene.gltf(filepath="{glb_path}", export_format='GLB')
-  """                                                                                                                                 
-      with open("/tmp/convert.py", "w") as f:
-          f.write(convert_script)                                                                                                     
-                  
+  bpy.ops.import_mesh.ply(filepath="{recon_ply}")
+  bpy.ops.export_scene.gltf(filepath="{glb_path}", export_format='GLB')                                                               
+  """
+      with open("/tmp/convert.py", "w") as f:                                                                                         
+          f.write(convert_script)
+                                                                                                                                      
       result = subprocess.run(
           ["blender", "--background", "--python", "/tmp/convert.py"],
-          capture_output=True, text=True                                                                                              
-      )
-                                                                                                                                      
+          capture_output=True, text=True
+      )                                                                                                                               
+   
       if not os.path.exists(glb_path):                                                                                                
           return {"status": "error", "message": "GLB conversion failed", "log": result.stderr[-2000:]}
                                                                                                                                       
       with open(glb_path, "rb") as f:
-          glb_b64 = base64.b64encode(f.read()).decode("utf-8")
-                                                                                                                                      
-      return {"mesh_base64": glb_b64, "status": "ok"}
-                                                                                                                                      
+          glb_b64 = base64.b64encode(f.read()).decode("utf-8")                                                                        
+                  
+      return {"mesh_base64": glb_b64, "status": "ok"}                                                                                 
+   
   def handle_render(job_input, mesh_path=None):                                                                                       
       prompt = job_input.get("prompt", "")
       model_b64 = job_input.get("model_base64", None)                                                                                 
-                                                                                                                                      
-      if mesh_path is None and model_b64:
-          mesh_path = "/tmp/model.glb"                                                                                                
+   
+      if mesh_path is None and model_b64:                                                                                             
+          mesh_path = "/tmp/model.glb"
           with open(mesh_path, "wb") as f:                                                                                            
               f.write(base64.b64decode(model_b64))
                                                                                                                                       
       with open("/tmp/input.json", "w") as f:
-          json.dump({"mesh_path": mesh_path, "output_path": "/tmp/output", "prompt": prompt}, f)
+          json.dump({"mesh_path": mesh_path, "output_path": "/tmp/output", "prompt": prompt}, f)                                      
                                                                                                                                       
-      blender_script = """                                                                                                            
+      blender_script = """
   import bpy, json, os, math                                                                                                          
   from mathutils import Vector                                                                                                        
-                  
-  with open("/tmp/input.json") as f:
+   
+  with open("/tmp/input.json") as f:                                                                                                  
       data = json.load(f)
 
   bpy.ops.wm.read_factory_settings(use_empty=True)                                                                                    
@@ -89,25 +89,25 @@
   if mesh_path and os.path.exists(mesh_path):                                                                                         
       if mesh_path.endswith(".glb") or mesh_path.endswith(".gltf"):
           bpy.ops.import_scene.gltf(filepath=mesh_path)                                                                               
-      elif mesh_path.endswith(".ply"):                                                                                                
-          bpy.ops.import_mesh.ply(filepath=mesh_path)
-      elif mesh_path.endswith(".obj"):                                                                                                
+      elif mesh_path.endswith(".ply"):
+          bpy.ops.import_mesh.ply(filepath=mesh_path)                                                                                 
+      elif mesh_path.endswith(".obj"):
           bpy.ops.import_scene.obj(filepath=mesh_path)                                                                                
-      import bmesh as _bmesh
-      for obj in bpy.context.scene.objects:                                                                                           
+      import bmesh as _bmesh                                                                                                          
+      for obj in bpy.context.scene.objects:
           if obj.type == "MESH":                                                                                                      
               obj.rotation_euler[0] = math.radians(90)
       bpy.ops.object.select_all(action='SELECT')                                                                                      
-      bpy.ops.object.transform_apply(rotation=True)
-      for obj in bpy.context.scene.objects:                                                                                           
+      bpy.ops.object.transform_apply(rotation=True)                                                                                   
+      for obj in bpy.context.scene.objects:
           if obj.type == "MESH":                                                                                                      
               bpy.context.view_layer.objects.active = obj
               rem = obj.modifiers.new("Remesh", "REMESH")                                                                             
               rem.mode = 'SMOOTH'                                                                                                     
-              rem.octree_depth = 6                                                                                                    
+              rem.octree_depth = 6
               rem.use_smooth_shade = True                                                                                             
-              bpy.ops.object.modifier_apply(modifier="Remesh")                                                                        
-              bm = _bmesh.new()
+              bpy.ops.object.modifier_apply(modifier="Remesh")
+              bm = _bmesh.new()                                                                                                       
               bm.from_mesh(obj.data)                                                                                                  
               _bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
               bm.to_mesh(obj.data)                                                                                                    
@@ -124,7 +124,7 @@
   elif "chrome" in prompt or "steel" in prompt:                                                                                       
       color = (0.9, 0.9, 0.9, 1)
   elif "wood" in prompt or "oak" in prompt or "walnut" in prompt:                                                                     
-      color = (0.4, 0.25, 0.1, 1); metallic = 0.0; roughness = 0.8                                                                    
+      color = (0.4, 0.25, 0.1, 1); metallic = 0.0; roughness = 0.8
   elif "linen" in prompt or "fabric" in prompt or "grey" in prompt or "gray" in prompt:                                               
       color = (0.6, 0.6, 0.6, 1); metallic = 0.0; roughness = 0.95                                                                    
   elif "leather" in prompt:                                                                                                           
@@ -136,10 +136,10 @@
   else:                                                                                                                               
       color = (0.8, 0.8, 0.8, 1)
                                                                                                                                       
-  for obj in bpy.context.scene.objects:                                                                                               
-      if obj.type == "MESH":
-          mat = bpy.data.materials.new("Mat")                                                                                         
-          mat.use_nodes = True
+  for obj in bpy.context.scene.objects:
+      if obj.type == "MESH":                                                                                                          
+          mat = bpy.data.materials.new("Mat")
+          mat.use_nodes = True                                                                                                        
           bsdf = mat.node_tree.nodes.get("Principled BSDF")
           if bsdf:                                                                                                                    
               bsdf.inputs["Base Color"].default_value = color
@@ -149,109 +149,110 @@
           obj.data.materials.append(mat)
                                                                                                                                       
   mesh_objects = [o for o in bpy.context.scene.objects if o.type == "MESH"]                                                           
-  all_corners = []
+  all_corners = []                                                                                                                    
   for obj in mesh_objects:                                                                                                            
-      for corner in obj.bound_box:                                                                                                    
+      for corner in obj.bound_box:
           all_corners.append(obj.matrix_world @ Vector(corner))
                                                                                                                                       
-  if all_corners:                                                                                                                     
-      min_x = min(c.x for c in all_corners); max_x = max(c.x for c in all_corners)
+  if all_corners:
+      min_x = min(c.x for c in all_corners); max_x = max(c.x for c in all_corners)                                                    
       min_y = min(c.y for c in all_corners); max_y = max(c.y for c in all_corners)                                                    
-      min_z = min(c.z for c in all_corners); max_z = max(c.z for c in all_corners)                                                    
-      center = Vector(((min_x+max_x)/2, (min_y+max_y)/2, (min_z+max_z)/2))
-      size = max(max_x-min_x, max_y-min_y, max_z-min_z)                                                                               
+      min_z = min(c.z for c in all_corners); max_z = max(c.z for c in all_corners)
+      center = Vector(((min_x+max_x)/2, (min_y+max_y)/2, (min_z+max_z)/2))                                                            
+      size = max(max_x-min_x, max_y-min_y, max_z-min_z)
       dist = size * 2.2                                                                                                               
-      cam_loc = Vector((center.x + dist*0.6, center.y - dist, center.z + dist*0.5))                                                   
+      cam_loc = Vector((center.x + dist*0.6, center.y - dist, center.z + dist*0.5))
       bpy.ops.object.camera_add(location=cam_loc)                                                                                     
-      cam = bpy.context.object                                                                                                        
+      cam = bpy.context.object
       direction = center - cam_loc                                                                                                    
       rot_quat = direction.to_track_quat("-Z", "Y")
       cam.rotation_euler = rot_quat.to_euler()                                                                                        
-      bpy.context.scene.camera = cam                                                                                                  
-   
-  NUM_FRAMES = 16                                                                                                                     
-  for obj in mesh_objects:
+      bpy.context.scene.camera = cam
+                                                                                                                                      
+  # Turntable rotation animation (8 frames = full 360)                                                                                
+  NUM_FRAMES = 8
+  for obj in mesh_objects:                                                                                                            
       obj.rotation_euler[2] = 0
       obj.keyframe_insert(data_path="rotation_euler", frame=1)
-      obj.rotation_euler[2] = math.radians(360)                                                                                       
-      obj.keyframe_insert(data_path="rotation_euler", frame=NUM_FRAMES + 1)
-      if obj.animation_data and obj.animation_data.action:                                                                            
+      obj.rotation_euler[2] = math.radians(360)
+      obj.keyframe_insert(data_path="rotation_euler", frame=NUM_FRAMES + 1)                                                           
+      if obj.animation_data and obj.animation_data.action:
           for fc in obj.animation_data.action.fcurves:                                                                                
-              for kp in fc.keyframe_points:
-                  kp.interpolation = 'LINEAR'                                                                                         
-                  
-  world = bpy.context.scene.world                                                                                                     
+              for kp in fc.keyframe_points:                                                                                           
+                  kp.interpolation = 'LINEAR'
+                                                                                                                                      
+  world = bpy.context.scene.world
   if not world:
       world = bpy.data.worlds.new("World")                                                                                            
       bpy.context.scene.world = world
-  world.use_nodes = True
+  world.use_nodes = True                                                                                                              
   nt = world.node_tree
   bg = nt.nodes.get("Background")
-  if not bg:                                                                                                                          
+  if not bg:
       bg = nt.nodes.new("ShaderNodeBackground")
       out = nt.nodes.get("World Output") or nt.nodes.new("ShaderNodeOutputWorld")                                                     
-      nt.links.new(bg.outputs["Background"], out.inputs["Surface"])
+      nt.links.new(bg.outputs["Background"], out.inputs["Surface"])                                                                   
   bg.inputs["Color"].default_value = (0.05, 0.05, 0.05, 1)                                                                            
-  bg.inputs["Strength"].default_value = 0.3
+  bg.inputs["Strength"].default_value = 0.3                                                                                           
                                                                                                                                       
-  bpy.ops.object.light_add(type="AREA", location=(4, -3, 6))                                                                          
-  bpy.context.object.data.energy = 2000
+  bpy.ops.object.light_add(type="AREA", location=(4, -3, 6))
+  bpy.context.object.data.energy = 2000                                                                                               
   bpy.context.object.data.size = 4                                                                                                    
   bpy.ops.object.light_add(type="AREA", location=(-4, 2, 4))
   bpy.context.object.data.energy = 600                                                                                                
   bpy.context.object.data.size = 6
   bpy.ops.object.light_add(type="AREA", location=(0, 4, 2))                                                                           
-  bpy.context.object.data.energy = 300                                                                                                
-  bpy.context.object.data.size = 8
+  bpy.context.object.data.energy = 300
+  bpy.context.object.data.size = 8                                                                                                    
                                                                                                                                       
   scene = bpy.context.scene
-  scene.render.engine = "CYCLES"
+  scene.render.engine = "CYCLES"                                                                                                      
   scene.cycles.device = "GPU"
-  try:                                                                                                                                
+  try:
       prefs = bpy.context.preferences.addons["cycles"].preferences
-      prefs.compute_device_type = "CUDA"                                                                                              
-      prefs.get_devices()
+      prefs.compute_device_type = "CUDA"
+      prefs.get_devices()                                                                                                             
       for d in prefs.devices:
-          d.use = True
-  except Exception as e:                                                                                                              
+          d.use = True                                                                                                                
+  except Exception as e:
       print("GPU setup failed, falling back to CPU:", e)
-  scene.cycles.samples = 16                                                                                                           
-  scene.render.resolution_x = 512
+  scene.cycles.samples = 8
+  scene.render.resolution_x = 512                                                                                                     
   scene.render.resolution_y = 512
-  scene.render.image_settings.file_format = "PNG"
-  scene.frame_start = 1                                                                                                               
+  scene.render.image_settings.file_format = "PNG"                                                                                     
+  scene.frame_start = 1
   scene.frame_end = NUM_FRAMES
   scene.render.filepath = os.path.join(data["output_path"], "frame_")                                                                 
   bpy.ops.render.render(animation=True)
-  """
-                                                                                                                                      
-      with open("/tmp/render.py", "w") as f:
-          f.write(blender_script)                                                                                                     
+  """                                                                                                                                 
                   
+      with open("/tmp/render.py", "w") as f:                                                                                          
+          f.write(blender_script)
+                                                                                                                                      
       result = subprocess.run(
           ["blender", "--background", "--python", "/tmp/render.py"],
           capture_output=True, text=True
-      )                                                                                                                               
-   
+      )
+
       import glob                                                                                                                     
       from PIL import Image
-
+                                                                                                                                      
       frame_files = sorted(glob.glob("/tmp/output/frame_*.png"))
       if frame_files:
           images = [Image.open(f).convert("RGBA") for f in frame_files]
-          gif_path = "/tmp/output/render.gif"                                                                                         
-          images[0].save(
-              gif_path,                                                                                                               
-              save_all=True,
+          gif_path = "/tmp/output/render.gif"
+          images[0].save(                                                                                                             
+              gif_path,
+              save_all=True,                                                                                                          
               append_images=images[1:],
               loop=0,
-              duration=100,                                                                                                           
-              disposal=2
-          )                                                                                                                           
-          with open(gif_path, "rb") as f:
+              duration=150,
+              disposal=2                                                                                                              
+          )
+          with open(gif_path, "rb") as f:                                                                                             
               img_b64 = base64.b64encode(f.read()).decode("utf-8")
           return {"image_base64": img_b64, "status": "ok", "format": "gif"}
       else:                                                                                                                           
           return {"status": "error", "log": result.stderr[-3000:]}
                                                                                                                                       
-  runpod.serverless.start({"handler": handler})               
+  runpod.serverless.start({"handler": handler})                    
