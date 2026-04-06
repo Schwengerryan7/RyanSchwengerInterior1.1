@@ -287,21 +287,16 @@
     <div class="stage-body" style="grid-template-columns: 280px 1fr;">
       <div class="controls">
         <div class="status-text" id="result-info"></div>
-        <div style="display:flex;gap:6px;margin-top:8px;">
-          <button class="btn btn-secondary" id="tab-render" style="flex:1;padding:7px;" onclick="switchTab('render')">Render</button>
-          <button class="btn btn-secondary" id="tab-3d" style="flex:1;padding:7px;" onclick="switchTab('3d')">3D View</button>
-        </div>
-        <a class="download-btn" id="download-gif-btn" download="render.gif">⬇ Download GIF</a>
+        <a class="download-btn" id="download-gif-btn" download="render.gif" style="margin-top:8px;">⬇ Download GIF</a>
         <a class="download-btn" id="download-glb-btn" download="model.glb" style="margin-top:6px;">⬇ Download GLB</a>
         <button class="btn btn-secondary" id="btn-restart" style="margin-top:auto;">↺ Start Over</button>
       </div>
       <div class="viewer" style="min-height:400px;" id="s4-viewer">
         <div class="viewer-placeholder" id="placeholder-4">
           <div class="icon">✦</div>
-          <div>Final render will appear here</div>
+          <div>3D viewer will appear here</div>
         </div>
-        <img class="result-img" id="final-img" alt="Final render">
-        <div id="viewer-3d" style="width:100%;height:100%;min-height:400px;display:none;"></div>
+        <div id="viewer-3d" style="width:100%;height:100%;min-height:400px;"></div>
       </div>
     </div>
   </div>
@@ -748,8 +743,6 @@ document.getElementById('btn-render').addEventListener('click', async () => {
 // ── Stage 4 ──
 function showFinalResult(imgUrl, glbBase64, prompt) {
   setStage(4);
-  document.getElementById('final-img').src = imgUrl;
-  document.getElementById('final-img').classList.add('visible');
   document.getElementById('placeholder-4').style.display = 'none';
   document.getElementById('result-info').textContent = `Material: ${prompt.slice(0, 60)}`;
 
@@ -768,7 +761,8 @@ function showFinalResult(imgUrl, glbBase64, prompt) {
   }
 
   document.getElementById('s4-subtitle').textContent = 'Render complete';
-  showToast('Done! Switch to 3D View to explore interactively.');
+  setTimeout(() => load3DViewer(resultGlbBase64), 100);
+  showToast('Done! Drag to rotate the 3D model.');
 }
 
 function switchTab(tab) {
@@ -830,8 +824,6 @@ document.getElementById('btn-restart').addEventListener('click', () => {
   resultGlbBase64 = null;
   s4Scene         = null;
   document.getElementById('viewer-3d').innerHTML = '';
-  document.getElementById('viewer-3d').style.display = 'none';
-  document.getElementById('final-img').style.display = '';
   setStage(1);
   uploadZone.classList.remove('has-file');
   uploadZone.innerHTML = `<span class="upload-icon">☁</span><div>Drop .ply file here</div><div style="margin-top:4px;font-size:11px;">or click to browse</div>`;
@@ -839,7 +831,6 @@ document.getElementById('btn-restart').addEventListener('click', () => {
   document.getElementById('btn-next-1').disabled = true;
   document.getElementById('btn-next-2').disabled = true;
   document.getElementById('result-img').classList.remove('visible');
-  document.getElementById('final-img').classList.remove('visible');
   document.getElementById('download-gif-btn').classList.remove('visible');
   document.getElementById('download-glb-btn').classList.remove('visible');
   document.getElementById('placeholder-1').style.display = '';
