@@ -8,16 +8,16 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #0e0e10;
-      --surface: #18181b;
-      --border: #27272a;
-      --accent: #6366f1;
+      --bg:           #0e0e10;
+      --surface:      #18181b;
+      --border:       #27272a;
+      --accent:       #6366f1;
       --accent-hover: #818cf8;
-      --text: #f4f4f5;
-      --text-muted: #71717a;
-      --success: #22c55e;
-      --error: #ef4444;
-      --step-inactive: #27272a;
+      --text:         #f4f4f5;
+      --text-muted:   #71717a;
+      --success:      #22c55e;
+      --error:        #ef4444;
+      --step-inactive:#27272a;
     }
 
     body {
@@ -28,14 +28,11 @@
     }
 
     header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 16px 32px;
-      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 32px; border-bottom: 1px solid var(--border);
       background: var(--surface);
     }
-    header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; color: var(--text); }
+    header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.05em; }
     .conn-badge { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
     .conn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--error); transition: background 0.3s; }
     .conn-dot.connected { background: var(--success); }
@@ -43,8 +40,9 @@
     main { max-width: 1400px; margin: 0 auto; padding: 32px; display: flex; flex-direction: column; gap: 24px; }
 
     .stage { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; transition: border-color 0.2s; }
-    .stage.active { border-color: var(--accent); }
-    .stage.disabled { opacity: 0.4; pointer-events: none; }
+    .stage.active  { border-color: var(--accent); }
+    .stage.disabled{ opacity: 0.4; pointer-events: none; }
+    .stage.done .stage-num { background: var(--success) !important; color: #fff !important; }
 
     .stage-header { display: flex; align-items: center; gap: 16px; padding: 16px 24px; border-bottom: 1px solid var(--border); }
     .stage-num {
@@ -53,19 +51,19 @@
       font-size: 12px; font-weight: 700; color: var(--text-muted); flex-shrink: 0; transition: background 0.2s, color 0.2s;
     }
     .stage.active .stage-num { background: var(--accent); color: #fff; }
-    .stage.done .stage-num { background: var(--success); color: #fff; }
-    .stage-title { font-size: 14px; font-weight: 600; }
+    .stage-title    { font-size: 14px; font-weight: 600; }
     .stage-subtitle { font-size: 12px; color: var(--text-muted); margin-left: auto; }
 
-    .stage-body { display: grid; grid-template-columns: 280px 1fr; min-height: 320px; }
+    .stage-body { display: grid; grid-template-columns: 300px 1fr; min-height: 340px; }
 
-    .controls { padding: 24px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 16px; }
+    .controls { padding: 24px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 14px; }
 
     .viewer { position: relative; background: #0a0a0c; }
     .viewer canvas { display: block; width: 100% !important; height: 100% !important; }
     .viewer-placeholder {
       position: absolute; inset: 0; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 8px; color: var(--text-muted); font-size: 13px;
+      align-items: center; justify-content: center; gap: 8px;
+      color: var(--text-muted); font-size: 13px;
     }
     .viewer-placeholder .icon { font-size: 32px; opacity: 0.3; }
 
@@ -79,36 +77,49 @@
     .upload-zone .upload-icon { font-size: 24px; margin-bottom: 8px; display: block; }
 
     .btn { padding: 10px 20px; border-radius: 8px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.2s, opacity 0.2s; width: 100%; }
-    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary   { background: var(--accent); color: #fff; }
     .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
     .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
     .btn-secondary:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
 
     .presets { display: flex; flex-wrap: wrap; gap: 6px; }
     .preset-chip {
       padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border);
       background: transparent; color: var(--text-muted); font-size: 11px; cursor: pointer; transition: all 0.15s;
     }
-    .preset-chip:hover { border-color: var(--accent); color: var(--accent); }
+    .preset-chip:hover  { border-color: var(--accent); color: var(--accent); }
     .preset-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
     .progress-wrap { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
-    .progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.4s ease; }
+    .progress-bar  { height: 100%; background: var(--accent); width: 0%; transition: width 0.4s ease; }
+    .status-text   { font-size: 11px; color: var(--text-muted); min-height: 16px; }
 
-    .status-text { font-size: 11px; color: var(--text-muted); min-height: 16px; }
+    label {
+      font-size: 11px; color: var(--text-muted); font-weight: 500;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .radius-row { display: flex; align-items: center; gap: 8px; }
+    .radius-row input[type=range] { flex: 1; accent-color: var(--accent); }
+    .radius-val { font-size: 11px; color: var(--text-muted); min-width: 32px; text-align: right; }
 
     .result-img { width: 100%; height: 100%; object-fit: contain; display: none; }
     .result-img.visible { display: block; }
 
     .download-btn {
       display: none; padding: 8px 16px; border-radius: 6px; background: var(--surface);
-      border: 1px solid var(--border); color: var(--text); font-size: 12px; text-decoration: none; text-align: center;
+      border: 1px solid var(--border); color: var(--text); font-size: 12px;
+      text-decoration: none; text-align: center;
     }
     .download-btn.visible { display: block; }
     .download-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-    label { font-size: 11px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+    .info-badge {
+      font-size: 11px; color: var(--text-muted); background: var(--bg);
+      border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; display: none;
+    }
+    .info-badge.visible { display: block; }
 
     #toast {
       position: fixed; bottom: 24px; left: 50%;
@@ -119,16 +130,6 @@
       white-space: nowrap; z-index: 1000;
     }
     #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-    .info-badge {
-      font-size: 11px; color: var(--text-muted); background: var(--bg);
-      border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; display: none;
-    }
-    .info-badge.visible { display: block; }
-
-    .radius-row { display: flex; align-items: center; gap: 8px; }
-    .radius-row input[type=range] { flex: 1; accent-color: var(--accent); }
-    .radius-val { font-size: 11px; color: var(--text-muted); min-width: 32px; text-align: right; }
   </style>
 </head>
 <body>
@@ -154,7 +155,7 @@
       <div class="controls">
         <div>
           <label>Point Cloud File</label>
-          <div style="margin-top: 8px;">
+          <div style="margin-top:8px;">
             <div class="upload-zone" id="upload-zone">
               <span class="upload-icon">☁</span>
               <div>Drop .ply file here</div>
@@ -164,7 +165,7 @@
           </div>
         </div>
         <div class="info-badge" id="point-info"></div>
-        <button class="btn btn-primary" id="btn-next-1" disabled>Continue to Mesh →</button>
+        <button class="btn btn-primary" id="btn-next-1" disabled>Continue to Preview →</button>
       </div>
       <div class="viewer" id="viewer-pointcloud">
         <div class="viewer-placeholder" id="placeholder-1">
@@ -175,83 +176,81 @@
     </div>
   </div>
 
-  <!-- STAGE 2: Browser Mesh -->
+  <!-- STAGE 2: Browser Mesh Preview -->
   <div class="stage disabled" id="stage-2">
     <div class="stage-header">
       <div class="stage-num">2</div>
-      <div><div class="stage-title">Reconstruct Mesh</div></div>
-      <div class="stage-subtitle" id="s2-subtitle">Voxel Mesh — runs in browser, no server needed</div>
+      <div><div class="stage-title">Mesh Preview</div></div>
+      <div class="stage-subtitle" id="s2-subtitle">Quick browser preview before sending to AI</div>
     </div>
     <div class="stage-body">
       <div class="controls">
         <div>
           <label>Point Sensitivity</label>
           <div style="margin-top:8px;font-size:12px;color:var(--text-muted);line-height:1.6;">
-            How far the mesh expands around each point. Low = sharp & tight. High = fills gaps but puffier.
+            How far the mesh expands around each point.
           </div>
           <div class="radius-row" style="margin-top:10px;">
             <input type="range" id="fill-slider" min="0.8" max="2.5" step="0.1" value="1.2">
-            <span class="radius-val" id="fill-val">1.1</span>
+            <span class="radius-val" id="fill-val">1.2</span>
           </div>
         </div>
         <div>
           <label>Voxel Resolution</label>
-          <div style="margin-top:8px;font-size:12px;color:var(--text-muted);line-height:1.6;">
-            Grid density. Higher = more triangles & detail. 60 recommended for Blender.
-          </div>
           <div class="radius-row" style="margin-top:10px;">
             <input type="range" id="detail-slider" min="15" max="80" step="1" value="60">
-            <span class="radius-val" id="detail-val">30</span>
+            <span class="radius-val" id="detail-val">60</span>
           </div>
         </div>
         <div>
           <label>Smoothing Passes</label>
-          <div style="margin-top:8px;font-size:12px;color:var(--text-muted);line-height:1.6;">
-            Rounds voxel edges. More = smoother but less defined.
-          </div>
           <div class="radius-row" style="margin-top:10px;">
             <input type="range" id="iter-slider" min="0" max="20" step="1" value="5">
-            <span class="radius-val" id="iter-val">8</span>
+            <span class="radius-val" id="iter-val">5</span>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+        <div style="display:flex;align-items:center;gap:8px;">
           <input type="checkbox" id="seal-bottom" checked style="accent-color:var(--accent);width:14px;height:14px;cursor:pointer;">
-          <label style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text-muted);cursor:pointer;" for="seal-bottom">Seal bottom (closes underside for Blender)</label>
+          <label style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text-muted);cursor:pointer;" for="seal-bottom">Seal bottom</label>
         </div>
         <div class="progress-wrap"><div class="progress-bar" id="mesh-progress"></div></div>
         <div class="status-text" id="mesh-status"></div>
-        <button class="btn btn-primary" id="btn-mesh">Reconstruct Mesh</button>
+        <button class="btn btn-primary" id="btn-mesh">Preview Mesh</button>
         <button class="btn btn-secondary" id="btn-next-2" disabled>Continue to Render →</button>
       </div>
       <div class="viewer" id="viewer-mesh">
         <div class="viewer-placeholder" id="placeholder-2">
           <div class="icon">◈</div>
-          <div>Mesh will appear here after reconstruction</div>
+          <div>Mesh preview will appear here</div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- STAGE 3: Render -->
+  <!-- STAGE 3: Material + Render (unified) -->
   <div class="stage disabled" id="stage-3">
     <div class="stage-header">
       <div class="stage-num">3</div>
       <div><div class="stage-title">Apply Material & Render</div></div>
-      <div class="stage-subtitle">Blender Cycles photorealistic render</div>
+      <div class="stage-subtitle" id="s3-subtitle">Reconstruct + Blender Cycles photorealistic render</div>
     </div>
     <div class="stage-body">
       <div class="controls">
         <div>
           <label>Material Preset</label>
           <div class="presets" style="margin-top:8px;" id="presets">
-            <button class="preset-chip" data-prompt="polished chrome metal material, reflective, studio lighting">Chrome</button>
-            <button class="preset-chip" data-prompt="natural oak wood material, warm grain, matte finish">Oak Wood</button>
-            <button class="preset-chip" data-prompt="soft grey fabric upholstery, woven texture, matte">Fabric</button>
-            <button class="preset-chip" data-prompt="white marble material, subtle veining, polished">Marble</button>
-            <button class="preset-chip" data-prompt="matte black powder coated metal">Matte Black</button>
-            <button class="preset-chip" data-prompt="warm walnut wood, dark grain, satin finish">Walnut</button>
-            <button class="preset-chip" data-prompt="brushed stainless steel, satin finish">Steel</button>
-            <button class="preset-chip" data-prompt="terracotta clay, unglazed, matte earthy tone">Terracotta</button>
+            <button class="preset-chip" data-prompt="polished chrome metal, highly reflective">Chrome</button>
+            <button class="preset-chip" data-prompt="natural oak wood with warm grain, matte finish">Oak Wood</button>
+            <button class="preset-chip" data-prompt="soft grey linen fabric with woven texture">Linen</button>
+            <button class="preset-chip" data-prompt="white marble with subtle veining, polished">Marble</button>
+            <button class="preset-chip" data-prompt="matte black powder coated metal frame with grey fabric seat">Matte Black</button>
+            <button class="preset-chip" data-prompt="warm walnut wood frame with leather seat">Walnut + Leather</button>
+            <button class="preset-chip" data-prompt="brushed stainless steel">Steel</button>
+            <button class="preset-chip" data-prompt="terracotta clay, unglazed, matte earthy">Terracotta</button>
+            <button class="preset-chip" data-prompt="dark brown leather upholstery with chrome metal frame">Leather + Chrome</button>
+            <button class="preset-chip" data-prompt="brushed gold metal with velvet seat">Gold + Velvet</button>
+            <button class="preset-chip" data-prompt="black metal frame with yellow fabric seat">Black + Yellow</button>
+            <button class="preset-chip" data-prompt="oak wood frame with grey fabric cushion seat">Oak + Fabric</button>
           </div>
         </div>
         <div>
@@ -261,13 +260,16 @@
             border:1px solid var(--border); border-radius:6px;
             color:var(--text); font-size:12px; padding:8px;
             resize:none; outline:none; font-family:inherit;
-          " placeholder="Describe the material..."></textarea>
+          " placeholder="e.g. oak frame with grey linen seat, or all black leather..."></textarea>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">
+            Tip: use "X frame with Y seat" for multi-material results
+          </div>
         </div>
         <div class="progress-wrap"><div class="progress-bar" id="render-progress"></div></div>
         <div class="status-text" id="render-status"></div>
-        <button class="btn btn-primary" id="btn-render">Render with Blender</button>
+        <button class="btn btn-primary" id="btn-render" disabled>Reconstruct & Render</button>
       </div>
-      <div class="viewer" id="viewer-result">
+      <div class="viewer" id="viewer-render">
         <div class="viewer-placeholder" id="placeholder-3">
           <div class="icon">✦</div>
           <div>Photorealistic render will appear here</div>
@@ -284,10 +286,10 @@
       <div><div class="stage-title">Result</div></div>
       <div class="stage-subtitle" id="s4-subtitle">—</div>
     </div>
-    <div class="stage-body" style="grid-template-columns: 280px 1fr;">
+    <div class="stage-body" style="grid-template-columns: 300px 1fr;">
       <div class="controls">
         <div class="status-text" id="result-info"></div>
-        <a class="download-btn" id="download-gif-btn" download="render.gif" style="margin-top:8px;">⬇ Download GIF</a>
+        <a class="download-btn" id="download-png-btn" download="render.png" style="margin-top:8px;">⬇ Download PNG</a>
         <a class="download-btn" id="download-glb-btn" download="model.glb" style="margin-top:6px;">⬇ Download GLB</a>
         <button class="btn btn-secondary" id="btn-restart" style="margin-top:auto;">↺ Start Over</button>
       </div>
@@ -316,38 +318,34 @@
 
 <script type="module">
 import * as THREE from 'three';
-import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { PLYLoader }       from 'three/addons/loaders/PLYLoader.js';
+import { OrbitControls }   from 'three/addons/controls/OrbitControls.js';
+import { GLTFExporter }    from 'three/addons/exporters/GLTFExporter.js';
+import { GLTFLoader }      from 'three/addons/loaders/GLTFLoader.js';
+import { mergeVertices }   from 'three/addons/utils/BufferGeometryUtils.js';
 
-// ── Config ──
-const API_URL        = 'https://cautious-journey-69jrr96g77642rpq4-3001.app.github.dev';
+// ── Config ──────────────────────────────────────────────────────────────────
+const API_URL = 'http://localhost:3001';
 
-// ── State ──
-let plyGeometry    = null;
-let plyFile        = null;
-let meshBase64     = null;
-let resultGlbBase64 = null;
-let s4Scene        = null;
+// ── State ────────────────────────────────────────────────────────────────────
+let plyGeometry = null;
+let plyFile     = null;
+let s4Scene     = null;
 
-// ── Three.js scenes ──
+// ── Three.js scene factory ──────────────────────────────────────────────────
 function makeScene(containerId) {
   const container = document.getElementById(containerId);
   const renderer  = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-  const scene  = new THREE.Scene();
+  const scene    = new THREE.Scene();
   scene.background = new THREE.Color(0x0a0a0c);
-
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
+  const camera   = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
   camera.position.set(0, 0.5, 2);
-
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping  = true;
-  controls.dampingFactor  = 0.05;
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.6));
   const dir = new THREE.DirectionalLight(0xffffff, 1.2);
@@ -357,7 +355,7 @@ function makeScene(containerId) {
 
   function resize() {
     const w = container.clientWidth;
-    const h = container.clientHeight || 320;
+    const h = container.clientHeight || 340;
     renderer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
@@ -365,21 +363,15 @@ function makeScene(containerId) {
   container.appendChild(renderer.domElement);
   resize();
   window.addEventListener('resize', resize);
-
-  (function animate() {
-    requestAnimationFrame(animate);
-    controls.update();
-    renderer.render(scene, camera);
-  })();
-
-  return { scene, camera, controls, resize };
+  (function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); })();
+  return { scene, camera, controls };
 }
 
 const pcScene  = makeScene('viewer-pointcloud');
 const mshScene = makeScene('viewer-mesh');
 
-// ── Helpers ──
-function showToast(msg, duration = 3000) {
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function showToast(msg, duration = 3500) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
@@ -390,17 +382,17 @@ function setStage(n) {
   for (let i = 1; i <= 4; i++) {
     const el = document.getElementById(`stage-${i}`);
     el.classList.remove('active', 'disabled', 'done');
-    if (i < n)      el.classList.add('done');
+    if      (i < n)  el.classList.add('done');
     else if (i === n) el.classList.add('active');
-    else            el.classList.add('disabled');
+    else             el.classList.add('disabled');
   }
 }
 
 function fitCamera(camera, controls, object) {
   const box    = new THREE.Box3().setFromObject(object);
   const center = box.getCenter(new THREE.Vector3());
-  const size   = box.getSize(new THREE.Vector3());
-  const d      = Math.max(size.x, size.y, size.z);
+  const sz     = box.getSize(new THREE.Vector3());
+  const d      = Math.max(sz.x, sz.y, sz.z);
   camera.position.set(center.x + d * 0.6, center.y + d * 0.3, center.z + d * 1.8);
   controls.target.copy(center);
   controls.update();
@@ -409,7 +401,35 @@ function fitCamera(camera, controls, object) {
 function setProgress(id, pct) { document.getElementById(id).style.width = pct + '%'; }
 function setStatus(id, msg)   { document.getElementById(id).textContent = msg; }
 
-// ── Stage 1: Upload PLY ──
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const bytes = new Uint8Array(e.target.result);
+      let bin = '';
+      bytes.forEach(b => bin += String.fromCharCode(b));
+      resolve(btoa(bin));
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ── Connection check ─────────────────────────────────────────────────────────
+async function checkConnection() {
+  try {
+    const r = await fetch(`${API_URL}/health`);
+    if (r.ok) {
+      document.getElementById('conn-dot').classList.add('connected');
+      document.getElementById('conn-label').textContent = 'Proxy connected';
+    } else throw new Error();
+  } catch {
+    document.getElementById('conn-label').textContent = 'Proxy offline';
+  }
+}
+checkConnection();
+
+// ── Stage 1: Upload PLY ──────────────────────────────────────────────────────
 const uploadZone = document.getElementById('upload-zone');
 const fileInput  = document.getElementById('file-input');
 
@@ -429,18 +449,16 @@ function loadPLY(file) {
   plyFile = file;
   const reader = new FileReader();
   reader.onload = e => {
-    const loader    = new PLYLoader();
-    const geometry  = loader.parse(e.target.result);
+    const loader   = new PLYLoader();
+    const geometry = loader.parse(e.target.result);
     geometry.computeBoundingBox();
     plyGeometry = geometry;
 
-    const pointCount = geometry.attributes.position.count;
-
+    const count = geometry.attributes.position.count;
     pcScene.scene.children.filter(c => c.isPoints || c.isMesh).forEach(c => pcScene.scene.remove(c));
 
-    const mat  = new THREE.PointsMaterial({ size: 0.008, color: 0x6366f1, sizeAttenuation: true });
+    const mat = new THREE.PointsMaterial({ size: 0.008, color: 0x6366f1, sizeAttenuation: true });
     if (geometry.attributes.color) mat.vertexColors = true;
-
     const pts = new THREE.Points(geometry, mat);
     pcScene.scene.add(pts);
     fitCamera(pcScene.camera, pcScene.controls, pts);
@@ -450,64 +468,47 @@ function loadPLY(file) {
     uploadZone.innerHTML = `<span class="upload-icon">✓</span><strong>${file.name}</strong><div style="margin-top:4px;font-size:11px;">Click to change</div>`;
 
     const info = document.getElementById('point-info');
-    info.textContent = `${pointCount.toLocaleString()} points`;
+    info.textContent = `${count.toLocaleString()} points`;
     info.classList.add('visible');
-
-    document.getElementById('s1-subtitle').textContent = `${pointCount.toLocaleString()} points loaded`;
+    document.getElementById('s1-subtitle').textContent = `${count.toLocaleString()} points loaded`;
     document.getElementById('btn-next-1').disabled = false;
-    showToast(`Loaded ${pointCount.toLocaleString()} points`);
+    showToast(`Loaded ${count.toLocaleString()} points`);
   };
   reader.readAsArrayBuffer(file);
 }
 
 document.getElementById('btn-next-1').addEventListener('click', () => setStage(2));
 
-// ── Sliders ──
-document.getElementById('fill-slider').addEventListener('input', e => {
-  document.getElementById('fill-val').textContent = parseFloat(e.target.value).toFixed(1);
-});
-document.getElementById('detail-slider').addEventListener('input', e => {
-  document.getElementById('detail-val').textContent = e.target.value;
-});
-document.getElementById('iter-slider').addEventListener('input', e => {
-  document.getElementById('iter-val').textContent = e.target.value;
-});
+// ── Sliders ──────────────────────────────────────────────────────────────────
+document.getElementById('fill-slider').addEventListener('input',   e => { document.getElementById('fill-val').textContent   = parseFloat(e.target.value).toFixed(1); });
+document.getElementById('detail-slider').addEventListener('input', e => { document.getElementById('detail-val').textContent = e.target.value; });
+document.getElementById('iter-slider').addEventListener('input',   e => { document.getElementById('iter-val').textContent   = e.target.value; });
 
-// ── Voxel Mesh Reconstruction ──
-
+// ── Voxel Mesh (browser preview) ─────────────────────────────────────────────
 function buildAdjacency(indices, vertCount) {
   const adj = Array.from({ length: vertCount }, () => []);
   for (let i = 0; i < indices.length; i += 3) {
     const a = indices[i], b = indices[i+1], c = indices[i+2];
-    adj[a].push(b, c);
-    adj[b].push(a, c);
-    adj[c].push(a, b);
+    adj[a].push(b, c); adj[b].push(a, c); adj[c].push(a, b);
   }
-  return adj.map(nbrs => [...new Set(nbrs)]);
+  return adj.map(n => [...new Set(n)]);
 }
 
 function voxelizeMesh(geometry, resolution, smoothPasses, fillR, sealBottom = true) {
-  // Extract point cloud
   const pos = geometry.attributes.position;
   const pts = [];
-  for (let i = 0; i < pos.count; i++) {
-    pts.push([pos.getX(i), pos.getY(i), pos.getZ(i)]);
-  }
+  for (let i = 0; i < pos.count; i++) pts.push([pos.getX(i), pos.getY(i), pos.getZ(i)]);
 
-  // Bounding box with small padding
-  let mnX=Infinity,mnY=Infinity,mnZ=Infinity,mxX=-Infinity,mxY=-Infinity,mxZ=-Infinity;
+  let mnX=Infinity, mnY=Infinity, mnZ=Infinity, mxX=-Infinity, mxY=-Infinity, mxZ=-Infinity;
   pts.forEach(([x,y,z]) => {
     if(x<mnX)mnX=x; if(x>mxX)mxX=x;
     if(y<mnY)mnY=y; if(y>mxY)mxY=y;
     if(z<mnZ)mnZ=z; if(z>mxZ)mxZ=z;
   });
-  const W=resolution, H=resolution, D=resolution;
-  const pad=0.05;
+
+  const W=resolution, H=resolution, D=resolution, pad=0.05;
   mnX-=pad; mnY-=pad; mnZ-=pad; mxX+=pad; mxY+=pad; mxZ+=pad;
   const cX=(mxX-mnX)/W, cY=(mxY-mnY)/H, cZ=(mxZ-mnZ)/D;
-  // fillR passed in from slider
-
-  // Occupancy grid (padded by 1 on each side)
   const PW=W+2, PH=H+2;
   const grid = new Uint8Array((W+2)*(H+2)*(D+2));
   const gI = (x,y,z) => (x+1)+(y+1)*PW+(z+1)*PW*PH;
@@ -524,38 +525,29 @@ function voxelizeMesh(geometry, resolution, smoothPasses, fillR, sealBottom = tr
     }
   });
 
-  // Bridge-gaps pass: fill any empty voxel that has occupied neighbors on both
-  // sides of the same axis — this connects thin regions (like the chair's central pole)
-  // without inflating the overall mesh
-  const bridged = new Uint8Array(grid.length);
-  bridged.set(grid);
-  for (let x=0;x<W;x++) for (let y=0;y<H;y++) for (let z=0;z<D;z++) {
-    if (grid[gI(x,y,z)]) continue;
-    const nX = (x>0&&grid[gI(x-1,y,z)]) && (x<W-1&&grid[gI(x+1,y,z)]);
-    const nY = (y>0&&grid[gI(x,y-1,z)]) && (y<H-1&&grid[gI(x,y+1,z)]);
-    const nZ = (z>0&&grid[gI(x,y,z-1)]) && (z<D-1&&grid[gI(x,y,z+1)]);
-    if (nX || nY || nZ) bridged[gI(x,y,z)] = 1;
+  const bridged = new Uint8Array(grid.length); bridged.set(grid);
+  for(let x=0;x<W;x++) for(let y=0;y<H;y++) for(let z=0;z<D;z++) {
+    if(grid[gI(x,y,z)]) continue;
+    const nX=(x>0&&grid[gI(x-1,y,z)])&&(x<W-1&&grid[gI(x+1,y,z)]);
+    const nY=(y>0&&grid[gI(x,y-1,z)])&&(y<H-1&&grid[gI(x,y+1,z)]);
+    const nZ=(z>0&&grid[gI(x,y,z-1)])&&(z<D-1&&grid[gI(x,y,z+1)]);
+    if(nX||nY||nZ) bridged[gI(x,y,z)]=1;
   }
   grid.set(bridged);
 
-  // Seal bottom: extend 2 voxels below the lowest occupied voxel in each XZ column
-  // so the underside is fully closed for Blender rendering
-  if (sealBottom) {
-    for (let x = 0; x < W; x++) {
-      for (let z = 0; z < D; z++) {
-        for (let y = 0; y < H; y++) {
-          if (grid[gI(x, y, z)]) {
-            if (y > 0) grid[gI(x, y-1, z)] = 1;
-            if (y > 1) grid[gI(x, y-2, z)] = 1;
-            break;
-          }
+  if(sealBottom) {
+    for(let x=0;x<W;x++) for(let z=0;z<D;z++) {
+      for(let y=0;y<H;y++) {
+        if(grid[gI(x,y,z)]) {
+          if(y>0) grid[gI(x,y-1,z)]=1;
+          if(y>1) grid[gI(x,y-2,z)]=1;
+          break;
         }
       }
     }
   }
 
-  // Surface extraction: emit a quad for each exposed voxel face
-  const DIRS = [[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]];
+  const DIRS  = [[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]];
   const FACES = [
     [[-1,-1,-1],[-1,1,-1],[-1,1,1],[-1,-1,1]],
     [[ 1,-1, 1],[ 1,1, 1],[ 1,1,-1],[ 1,-1,-1]],
@@ -569,8 +561,8 @@ function voxelizeMesh(geometry, resolution, smoothPasses, fillR, sealBottom = tr
   for(let x=0;x<W;x++) for(let y=0;y<H;y++) for(let z=0;z<D;z++) {
     if(!grid[gI(x,y,z)]) continue;
     const wx=mnX+(x+.5)*cX, wy=mnY+(y+.5)*cY, wz=mnZ+(z+.5)*cZ;
-    DIRS.forEach(([dx,dy,dz], fi) => {
-      const nx=x+dx, ny=y+dy, nz=z+dz;
+    DIRS.forEach(([dx,dy,dz],fi) => {
+      const nx=x+dx,ny=y+dy,nz=z+dz;
       const empty=(nx<0||ny<0||nz<0||nx>=W||ny>=H||nz>=D)||!grid[gI(nx,ny,nz)];
       if(!empty) return;
       const fv=FACES[fi];
@@ -579,20 +571,17 @@ function voxelizeMesh(geometry, resolution, smoothPasses, fillR, sealBottom = tr
     });
   }
 
-  // Weld shared vertices for smoothing to work across the whole mesh
   let geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(rawVerts), 3));
   geo = mergeVertices(geo, 1e-5);
 
-  // Laplacian smoothing to round off the blocky voxel edges
-  if (smoothPasses > 0) {
-    const pa  = geo.attributes.position;
+  if(smoothPasses > 0) {
+    const pa = geo.attributes.position;
     const idxA = Array.from(geo.index.array);
-    const vC  = pa.count;
+    const vC = pa.count;
     const adj = buildAdjacency(idxA, vC);
-    const sv  = [];
+    const sv = [];
     for(let i=0;i<vC;i++) sv.push(new THREE.Vector3(pa.getX(i),pa.getY(i),pa.getZ(i)));
-
     for(let iter=0;iter<smoothPasses;iter++) {
       const tmp = sv.map((v,i) => {
         if(!adj[i].length) return v.clone();
@@ -607,84 +596,47 @@ function voxelizeMesh(geometry, resolution, smoothPasses, fillR, sealBottom = tr
     sv.forEach((v,i)=>{ pa2[i*3]=v.x; pa2[i*3+1]=v.y; pa2[i*3+2]=v.z; });
     geo.setAttribute('position', new THREE.BufferAttribute(pa2, 3));
   }
-
   geo.computeVertexNormals();
   return geo;
 }
 
-// ── Stage 2: Mesh button ──
 document.getElementById('btn-mesh').addEventListener('click', async () => {
   if (!plyGeometry) return;
-
   const btn = document.getElementById('btn-mesh');
-  btn.disabled    = true;
-  btn.textContent = 'Voxelizing...';
+  btn.disabled = true; btn.textContent = 'Voxelizing...';
   setProgress('mesh-progress', 10);
   setStatus('mesh-status', 'Building voxel grid...');
 
   await new Promise(r => setTimeout(r, 30));
 
-  try {
-    const fillR       = parseFloat(document.getElementById('fill-slider').value);
-    const resolution  = parseInt(document.getElementById('detail-slider').value);
-    const smoothPasses = parseInt(document.getElementById('iter-slider').value);
-    const sealBottom  = document.getElementById('seal-bottom').checked;
-    setProgress('mesh-progress', 20);
-    setStatus('mesh-status', 'Voxelizing point cloud...');
+  const fillR      = parseFloat(document.getElementById('fill-slider').value);
+  const resolution = parseInt(document.getElementById('detail-slider').value);
+  const smoothPass = parseInt(document.getElementById('iter-slider').value);
+  const sealBot    = document.getElementById('seal-bottom').checked;
 
-    await new Promise(r => setTimeout(r, 30));
-    const meshGeo = voxelizeMesh(plyGeometry, resolution, smoothPasses, fillR, sealBottom);
+  const geo = voxelizeMesh(plyGeometry, resolution, smoothPass, fillR, sealBot);
+  setProgress('mesh-progress', 80);
+  setStatus('mesh-status', 'Rendering mesh...');
 
-    setProgress('mesh-progress', 70);
-    setStatus('mesh-status', 'Building mesh...');
+  mshScene.scene.children.filter(c => c.isMesh && c.name !== 'grid').forEach(c => mshScene.scene.remove(c));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x6366f1, roughness: 0.5, metalness: 0.1, side: THREE.DoubleSide }));
+  mshScene.scene.add(mesh);
+  fitCamera(mshScene.camera, mshScene.controls, mesh);
+  document.getElementById('placeholder-2').style.display = 'none';
 
-    // Display in viewer
-    mshScene.scene.children.filter(c => c.isMesh).forEach(c => mshScene.scene.remove(c));
-
-    const mesh = new THREE.Mesh(meshGeo, new THREE.MeshStandardMaterial({
-      color: 0x888888, roughness: 0.6, metalness: 0.1, side: THREE.DoubleSide
-    }));
-    mshScene.scene.add(mesh);
-    fitCamera(mshScene.camera, mshScene.controls, mesh);
-    document.getElementById('placeholder-2').style.display = 'none';
-
-    setProgress('mesh-progress', 85);
-    setStatus('mesh-status', 'Exporting GLB...');
-
-    // Export to GLB for RunPod render
-    meshBase64 = await exportGLB(mesh);
-
-    setProgress('mesh-progress', 100);
-    setStatus('mesh-status', `Done — ${meshGeo.index.count / 3} triangles`);
-    document.getElementById('btn-next-2').disabled = false;
-    document.getElementById('s2-subtitle').textContent = 'Mesh ready';
-    showToast('Mesh wrapped in browser');
-
-  } catch (err) {
-    setStatus('mesh-status', 'Error: ' + err.message);
-    showToast('Mesh error: ' + err.message);
-    console.error(err);
-  } finally {
-    btn.disabled    = false;
-    btn.textContent = 'Reconstruct Mesh';
-  }
+  setProgress('mesh-progress', 100);
+  setStatus('mesh-status', `${geo.attributes.position.count.toLocaleString()} vertices`);
+  document.getElementById('btn-next-2').disabled = false;
+  btn.disabled = false; btn.textContent = 'Preview Mesh';
+  showToast('Mesh preview ready');
 });
 
-function exportGLB(mesh) {
-  return new Promise((resolve, reject) => {
-    const exporter = new GLTFExporter();
-    exporter.parse(mesh, result => {
-      const bytes  = new Uint8Array(result);
-      let binary   = '';
-      bytes.forEach(b => binary += String.fromCharCode(b));
-      resolve(btoa(binary));
-    }, reject, { binary: true });
-  });
-}
+document.getElementById('btn-next-2').addEventListener('click', () => {
+  setStage(3);
+  document.getElementById('btn-render').disabled = false;
+});
 
-document.getElementById('btn-next-2').addEventListener('click', () => setStage(3));
-
-// ── Stage 3: Render ──
+// ── Stage 3: Material Presets ────────────────────────────────────────────────
 document.querySelectorAll('.preset-chip').forEach(chip => {
   chip.addEventListener('click', () => {
     document.querySelectorAll('.preset-chip').forEach(c => c.classList.remove('active'));
@@ -693,210 +645,145 @@ document.querySelectorAll('.preset-chip').forEach(chip => {
   });
 });
 
+// ── Stage 3: Reconstruct + Render (single unified call) ──────────────────────
+async function pollJob(jobId, progressId, statusId, startPct, endPct) {
+  const start = Date.now();
+  let pct = startPct;
+  const step = (endPct - startPct) / 20;
+
+  while (true) {
+    await new Promise(r => setTimeout(r, 4000));
+    const elapsed = Math.round((Date.now() - start) / 1000);
+
+    try {
+      const res    = await fetch(`${API_URL}/status/${jobId}`);
+      const status = await res.json();
+
+      pct = Math.min(endPct - 2, pct + step);
+      setProgress(progressId, pct);
+
+      if (status.status === 'COMPLETED') {
+        setProgress(progressId, endPct);
+        return status.output;
+      }
+      if (status.status === 'FAILED') {
+        throw new Error(status.error || 'Job failed on RunPod');
+      }
+
+      setStatus(statusId, `Running... ${elapsed}s`);
+    } catch (e) {
+      if (e.message.includes('FAILED')) throw e;
+      setStatus(statusId, `Polling... ${elapsed}s`);
+    }
+  }
+}
+
 document.getElementById('btn-render').addEventListener('click', async () => {
+  if (!plyFile) { showToast('No PLY file loaded'); return; }
+
   const prompt = document.getElementById('prompt-input').value.trim();
-  if (!prompt)      { showToast('Select a material or enter a prompt'); return; }
-  if (!meshBase64)  { showToast('No mesh available — complete stage 2 first'); return; }
+  if (!prompt)  { showToast('Select a preset or enter a material prompt'); return; }
 
   const btn = document.getElementById('btn-render');
   btn.disabled    = true;
-  btn.textContent = 'Rendering...';
-  setProgress('render-progress', 10);
-  setStatus('render-status', 'Submitting to Blender...');
+  btn.textContent = 'Working...';
+  setProgress('render-progress', 5);
+  setStatus('render-status', 'Reading point cloud...');
 
   try {
+    const plyB64 = await readFileAsBase64(plyFile);
+    setProgress('render-progress', 10);
+    setStatus('render-status', 'Submitting to AI worker...');
+
     const submitRes = await fetch(`${API_URL}/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input: { prompt, model_base64: meshBase64 } })
+      body: JSON.stringify({ input: { ply_base64: plyB64, prompt } })
     });
 
     if (!submitRes.ok) throw new Error(`Submit failed: ${submitRes.status}`);
     const job = await submitRes.json();
-    setProgress('render-progress', 20);
-    setStatus('render-status', 'Waiting for GPU...');
 
-    const result = await pollJob(job.id, 'render-progress', 'render-status', 20, 95);
+    setProgress('render-progress', 15);
+    setStatus('render-status', 'Reconstructing mesh + rendering...');
+
+    const result = await pollJob(job.id, 'render-progress', 'render-status', 15, 95);
+
     setProgress('render-progress', 100);
 
     if (result && result.image_base64) {
-      const mime   = result.format === 'gif' ? 'image/gif' : 'image/png';
-      const imgUrl = `data:${mime};base64,${result.image_base64}`;
-      document.getElementById('result-img').src = imgUrl;
-      document.getElementById('result-img').classList.add('visible');
+      const imgUrl = `data:image/png;base64,${result.image_base64}`;
+      const img    = document.getElementById('result-img');
+      img.src      = imgUrl;
+      img.classList.add('visible');
       document.getElementById('placeholder-3').style.display = 'none';
-      showFinalResult(imgUrl, result.model_base64, prompt);
+      setStatus('render-status', 'Render complete');
+      showFinalResult(imgUrl, prompt);
     } else {
-      throw new Error('No image returned');
+      throw new Error(result?.error || 'No image returned from worker');
     }
 
   } catch (err) {
     setStatus('render-status', 'Error: ' + err.message);
-    showToast('Render error: ' + err.message);
+    showToast('Render error: ' + err.message, 5000);
     console.error(err);
   } finally {
     btn.disabled    = false;
-    btn.textContent = 'Render with Blender';
+    btn.textContent = 'Reconstruct & Render';
   }
 });
 
-// ── Stage 4 ──
-function showFinalResult(imgUrl, glbBase64, prompt) {
+// ── Stage 4: Result ──────────────────────────────────────────────────────────
+function showFinalResult(imgUrl, prompt) {
   setStage(4);
-  s4Scene = null;
-  document.getElementById('viewer-3d').innerHTML = '';
   document.getElementById('placeholder-4').style.display = 'none';
-  document.getElementById('result-info').textContent = `Material: ${prompt.slice(0, 60)}`;
-
-  const dlGif = document.getElementById('download-gif-btn');
-  dlGif.href = imgUrl;
-  dlGif.classList.add('visible');
-
-  if (meshBase64) {
-    resultGlbBase64 = meshBase64;
-    const bytes = Uint8Array.from(atob(meshBase64), c => c.charCodeAt(0));
-    const blob  = new Blob([bytes], { type: 'model/gltf-binary' });
-    const glbUrl = URL.createObjectURL(blob);
-    const dlGlb = document.getElementById('download-glb-btn');
-    dlGlb.href = glbUrl;
-    dlGlb.classList.add('visible');
-  }
-
   document.getElementById('s4-subtitle').textContent = 'Render complete';
-  setTimeout(() => load3DViewer(resultGlbBase64), 100);
-  showToast('Done! Drag to rotate the 3D model.');
-}
+  document.getElementById('result-info').textContent = prompt.slice(0, 80);
 
-function switchTab(tab) {
-  const renderBtn = document.getElementById('tab-render');
-  const tab3dBtn  = document.getElementById('tab-3d');
-  const img       = document.getElementById('final-img');
-  const v3d       = document.getElementById('viewer-3d');
+  const dlPng = document.getElementById('download-png-btn');
+  dlPng.href  = imgUrl;
+  dlPng.classList.add('visible');
 
-  if (tab === 'render') {
-    renderBtn.style.borderColor = 'var(--accent)';
-    renderBtn.style.color = 'var(--accent)';
-    tab3dBtn.style.borderColor = '';
-    tab3dBtn.style.color = '';
-    img.style.display = '';
-    v3d.style.display = 'none';
-  } else {
-    tab3dBtn.style.borderColor = 'var(--accent)';
-    tab3dBtn.style.color = 'var(--accent)';
-    renderBtn.style.borderColor = '';
-    renderBtn.style.color = '';
-    img.style.display = 'none';
-    v3d.style.display = '';
-    if (!s4Scene && resultGlbBase64) {
-      setTimeout(() => load3DViewer(resultGlbBase64), 50);
-    } else if (s4Scene) {
-      setTimeout(() => s4Scene.resize(), 50);
-    }
-  }
-}
+  // Show render image in result stage viewer too
+  const resultViewer = document.getElementById('viewer-3d');
+  resultViewer.innerHTML = '';
+  const finalImg = document.createElement('img');
+  finalImg.src = imgUrl;
+  finalImg.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+  resultViewer.appendChild(finalImg);
 
-function materialFromPrompt(prompt) {
-  const p = prompt.toLowerCase();
-  if (p.includes('chrome'))                          return { color: 0xf0f0f0, roughness: 0.03, metalness: 1.0 };
-  if (p.includes('gold'))                            return { color: 0xc8961a, roughness: 0.15, metalness: 1.0 };
-  if (p.includes('steel') || p.includes('metal'))   return { color: 0xaaaaaa, roughness: 0.4,  metalness: 1.0 };
-  if (p.includes('matte black'))                     return { color: 0x111111, roughness: 0.8,  metalness: 0.0 };
-  if (p.includes('walnut'))                          return { color: 0x3d1f0a, roughness: 0.75, metalness: 0.0 };
-  if (p.includes('oak') || p.includes('wood'))       return { color: 0x8c5c1e, roughness: 0.75, metalness: 0.0 };
-  if (p.includes('fabric') || p.includes('grey') || p.includes('gray')) return { color: 0x8c8c8c, roughness: 0.95, metalness: 0.0 };
-  if (p.includes('leather'))                         return { color: 0x3d1a07, roughness: 0.65, metalness: 0.0 };
-  if (p.includes('marble'))                          return { color: 0xf0ede8, roughness: 0.05, metalness: 0.0 };
-  if (p.includes('terracotta') || p.includes('clay')) return { color: 0xb85f3f, roughness: 0.95, metalness: 0.0 };
-  return { color: 0x999999, roughness: 0.5, metalness: 0.0 };
-}
-
-function load3DViewer(glbBase64) {
-  s4Scene = makeScene('viewer-3d');
-  s4Scene.scene.background = new THREE.Color(0x0a0a0c);
-
-  const prompt = document.getElementById('prompt-input').value;
-  const matProps = materialFromPrompt(prompt);
-
-  const bytes  = Uint8Array.from(atob(glbBase64), c => c.charCodeAt(0));
-  const blob   = new Blob([bytes], { type: 'model/gltf-binary' });
-  const url    = URL.createObjectURL(blob);
-
-  const loader = new GLTFLoader();
-  loader.load(url, gltf => {
-    const model = gltf.scene;
-    model.traverse(child => {
-      if (child.isMesh) {
-        child.material = new THREE.MeshStandardMaterial(matProps);
-      }
-    });
-    s4Scene.scene.add(model);
-    fitCamera(s4Scene.camera, s4Scene.controls, model);
-    URL.revokeObjectURL(url);
-  }, undefined, err => console.error('GLB load error:', err));
+  showToast('Done! Photorealistic render complete.');
 }
 
 document.getElementById('btn-restart').addEventListener('click', () => {
-  plyGeometry     = null;
-  plyFile         = null;
-  meshBase64      = null;
-  resultGlbBase64 = null;
-  s4Scene         = null;
-  document.getElementById('viewer-3d').innerHTML = '';
-  setStage(1);
-  uploadZone.classList.remove('has-file');
-  uploadZone.innerHTML = `<span class="upload-icon">☁</span><div>Drop .ply file here</div><div style="margin-top:4px;font-size:11px;">or click to browse</div>`;
+  plyGeometry = null;
+  plyFile     = null;
+  s4Scene     = null;
+
+  document.getElementById('upload-zone').classList.remove('has-file');
+  document.getElementById('upload-zone').innerHTML = `<span class="upload-icon">☁</span><div>Drop .ply file here</div><div style="margin-top:4px;font-size:11px;">or click to browse</div>`;
+  document.getElementById('file-input').value = '';
+
   document.getElementById('point-info').classList.remove('visible');
   document.getElementById('btn-next-1').disabled = true;
   document.getElementById('btn-next-2').disabled = true;
+  document.getElementById('btn-render').disabled = true;
   document.getElementById('result-img').classList.remove('visible');
-  document.getElementById('download-gif-btn').classList.remove('visible');
-  document.getElementById('download-glb-btn').classList.remove('visible');
-  document.getElementById('placeholder-1').style.display = '';
+  document.getElementById('placeholder-3').style.display = '';
   document.getElementById('placeholder-4').style.display = '';
-  setProgress('mesh-progress', 0);
-  setProgress('render-progress', 0);
-  setStatus('mesh-status', '');
-  setStatus('render-status', '');
+  document.getElementById('viewer-3d').innerHTML = '';
+
+  ['mesh-progress','render-progress'].forEach(id => setProgress(id, 0));
+  ['mesh-status','render-status','result-info'].forEach(id => setStatus(id, ''));
+
+  document.querySelectorAll('.preset-chip').forEach(c => c.classList.remove('active'));
+  document.getElementById('prompt-input').value = '';
+  document.getElementById('download-png-btn').classList.remove('visible');
+  document.getElementById('download-glb-btn').classList.remove('visible');
+
+  setStage(1);
 });
 
-// ── Poll RunPod job ──
-async function pollJob(jobId, progressBarId, statusId, startPct, endPct) {
-  const start = Date.now();
-  let pct     = startPct;
-  const step  = (endPct - startPct) / 15;
-
-  while (true) {
-    await new Promise(r => setTimeout(r, 3000));
-    const res    = await fetch(`${API_URL}/status/${jobId}`, {
-      headers: {}
-    });
-    const status = await res.json();
-    const elapsed = Math.round((Date.now() - start) / 1000);
-    setStatus(statusId, `Running... ${elapsed}s`);
-    pct = Math.min(pct + step, endPct);
-    setProgress(progressBarId, Math.round(pct));
-
-    if (status.status === 'COMPLETED') return status.output;
-    if (status.status === 'FAILED')    throw new Error('Job failed: ' + JSON.stringify(status.error));
-  }
-}
-
-// ── Connection check ──
-async function checkConnection() {
-  try {
-    const res = await fetch(`${API_URL}/health`, {
-      headers: {}
-    });
-    if (res.ok) {
-      document.getElementById('conn-dot').classList.add('connected');
-      document.getElementById('conn-label').textContent = 'Connected';
-    }
-  } catch {
-    document.getElementById('conn-label').textContent = 'Offline';
-  }
-}
-
-checkConnection();
 </script>
 </body>
 </html>
