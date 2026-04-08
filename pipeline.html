@@ -415,6 +415,39 @@ function readFileAsBase64(file) {
   });
 }
 
+// Build a compact subsampled PLY from already-parsed three.js geometry.
+// Caps at maxPoints to stay under Codespaces' 4 MB forwarding limit.
+function buildSubsampledPLY(geometry, maxPoints = 30000) {
+  const pos = geometry.attributes.position;
+  const col = geometry.attributes.color;
+  const total = pos.count;
+  const step  = Math.max(1, Math.ceil(total / maxPoints));
+  const hasColor = !!col;
+  const lines = [];
+  for (let i = 0; i < total; i += step) {
+    if (hasColor) {
+      lines.push(
+        `${pos.getX(i)} ${pos.getY(i)} ${pos.getZ(i)} ` +
+        `${Math.round(col.getX(i)*255)} ${Math.round(col.getY(i)*255)} ${Math.round(col.getZ(i)*255)}`
+      );
+    } else {
+      lines.push(`${pos.getX(i)} ${pos.getY(i)} ${pos.getZ(i)}`);
+    }
+  }
+  const header = [
+    'ply', 'format ascii 1.0',
+    `element vertex ${lines.length}`,
+    'property float x', 'property float y', 'property float z',
+    ...(hasColor ? ['property uchar red','property uchar green','property uchar blue'] : []),
+    'end_header', ''
+  ].join('\n');
+  const text  = header + lines.join('\n');
+  const bytes = new TextEncoder().encode(text);
+  let bin = '';
+  bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
+
 // ── Connection check ─────────────────────────────────────────────────────────
 async function checkConnection() {
   try {
@@ -691,7 +724,7 @@ document.getElementById('btn-render').addEventListener('click', async () => {
   setStatus('render-status', 'Reading point cloud...');
 
   try {
-    const plyB64 = await readFileAsBase64(plyFile);
+    const plyB64 = buildSubsampledPLY(plyGeometry, 30000);
     setProgress('render-progress', 10);
     setStatus('render-status', 'Submitting to AI worker...');
 
