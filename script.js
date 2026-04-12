@@ -190,6 +190,7 @@ async function triggerRender() {
 
     if (result && result.image_base64) {
       const imgUrl = `data:image/png;base64,${result.image_base64}`;
+      window.open(imgUrl, '_blank');   // DEBUG: open raw PNG in new tab
       showResult(imgUrl, prompt, elapsed);
       if (result.claude_notes && result.claude_notes.length > 0) {
         console.log('[Claude notes]', result.claude_notes);
