@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const uploadZone = document.getElementById('upload-zone');
   const fileInput  = document.getElementById('file-input');
 
-  uploadZone.addEventListener('click', () => fileInput.click());   // FIX: was inline onclick
+  uploadZone.addEventListener('click', () => fileInput.click());
 
   fileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -35,7 +35,8 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     uploadZone.style.borderColor = '';
     const file = e.dataTransfer.files[0];
-    if (file && (file.name.endsWith('.glb') || file.name.endsWith('.gltf'))) {
+    // FIX: accept .ply in addition to .glb / .gltf
+    if (file && (file.name.endsWith('.glb') || file.name.endsWith('.gltf') || file.name.endsWith('.ply'))) {
       handleFile(file);
     }
   });
@@ -45,7 +46,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-3d').addEventListener('click',     () => setView('3d'));
 
   // ── Material preset chips ──
-  // FIX: was onclick="selectPreset(this, '...')" inline — now uses data-prompt
   document.querySelectorAll('.preset-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
@@ -55,7 +55,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ── Suggestion chips ──
-  // FIX: was onclick="addSuggestion('...')" inline — now uses data-suggestion
   document.querySelectorAll('.suggestion').forEach(btn => {
     btn.addEventListener('click', () => {
       const input = document.getElementById('prompt-input');
@@ -66,7 +65,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ── Render button ──
-  // FIX: was onclick="triggerRender()" inline
   document.getElementById('render-btn').addEventListener('click', triggerRender);
 
   // ── Cmd/Ctrl+Enter shortcut ──
@@ -89,9 +87,12 @@ function handleFile(file) {
     `<strong>${file.name}</strong><br><span style="color:var(--text-muted)">Click to change</span>`;
   document.getElementById('file-label').textContent = file.name;
 
-  const url = URL.createObjectURL(file);
-  document.getElementById('model-viewer').src = url;
-  showToast('Model loaded: ' + file.name);
+  // Only load into 3D viewer if it's a GLB/GLTF (model-viewer can't show PLY)
+  if (!file.name.toLowerCase().endsWith('.ply')) {
+    const url = URL.createObjectURL(file);
+    document.getElementById('model-viewer').src = url;
+  }
+  showToast('File loaded: ' + file.name);
 }
 
 // ─────────────────────────────────────────────
@@ -132,9 +133,16 @@ async function triggerRender() {
   startLoading();
 
   try {
+    // FIX: detect PLY vs GLB and send to correct handler key
     let model_base64 = null;
+    let ply_base64 = null;
     if (currentFile) {
-      model_base64 = await fileToBase64(currentFile);
+      const b64 = await fileToBase64(currentFile);
+      if (currentFile.name.toLowerCase().endsWith('.ply')) {
+        ply_base64 = b64;
+      } else {
+        model_base64 = b64;
+      }
     }
 
     // Submit job
@@ -144,10 +152,14 @@ async function triggerRender() {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${RUNPOD_API_KEY}`
       },
-      body: JSON.stringify({ input: { prompt, model_base64 } })
+      // FIX: include both keys so handler picks the right path
+      body: JSON.stringify({ input: { prompt, model_base64, ply_base64 } })
     });
 
-    if (!submitRes.ok) { const errText = await submitRes.text(); throw new Error(`RunPod ${submitRes.status}: ${errText.slice(0,300)}`); }
+    if (!submitRes.ok) {
+      const errText = await submitRes.text();
+      throw new Error(`RunPod ${submitRes.status}: ${errText.slice(0, 300)}`);
+    }
     const job = await submitRes.json();
     const jobId = job.id;
     showToast('Job submitted — waiting for GPU...');
@@ -162,15 +174,16 @@ async function triggerRender() {
       });
       const status = await statusRes.json();
 
+      const elapsed = Math.round((Date.now() - start) / 1000);
+      document.getElementById('render-status').textContent = `Running... ${elapsed}s`;
+      console.log(`RunPod /status: ${statusRes.status}`, status);
+
       if (status.status === 'COMPLETED') {
         result = status.output;
         break;
       } else if (status.status === 'FAILED') {
         throw new Error('Render failed: ' + JSON.stringify(status));
       }
-
-      document.getElementById('render-status').textContent =
-        `Running... ${Math.round((Date.now() - start) / 1000)}s`;
     }
 
     const elapsed = ((Date.now() - start) / 1000).toFixed(1);
@@ -178,8 +191,13 @@ async function triggerRender() {
     if (result && result.image_base64) {
       const imgUrl = `data:image/png;base64,${result.image_base64}`;
       showResult(imgUrl, prompt, elapsed);
+      if (result.claude_notes && result.claude_notes.length > 0) {
+        console.log('[Claude notes]', result.claude_notes);
+      }
+    } else if (result && result.error) {
+      throw new Error('Render error: ' + result.error);
     } else {
-      throw new Error('No image returned');
+      throw new Error('No image returned: ' + JSON.stringify(result));
     }
 
   } catch (err) {
@@ -187,7 +205,7 @@ async function triggerRender() {
     console.error(err);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Render';
+    btn.textContent = 'Reconstruct & Render';
     stopLoading();
   }
 }
@@ -205,22 +223,30 @@ function showResult(imgUrl, prompt, time) {
   setView('render');
 
   const ri = document.getElementById('result-img');
-  ri.src = imgUrl;
-  ri.classList.add('loaded');
-  document.getElementById('result-placeholder').style.display = 'none';
-  document.getElementById('result-time').textContent = `Rendered in ${time}s`;
-  document.getElementById('stat-time').textContent = time + 's';
+  if (ri) {
+    ri.src = imgUrl;
+    ri.classList.add('loaded');
+  }
+  const rp = document.getElementById('result-placeholder');
+  if (rp) rp.style.display = 'none';
+
+  const rt = document.getElementById('result-time');
+  if (rt) rt.textContent = `Rendered in ${time}s`;
+  const st = document.getElementById('stat-time');
+  if (st) st.textContent = time + 's';
 
   const dl = document.getElementById('download-btn');
-  dl.href = imgUrl;
-  dl.classList.add('visible');
+  if (dl) {
+    dl.href = imgUrl;
+    dl.classList.add('visible');
+  }
 
   if (prevSrc && prevSrc !== imgUrl && prevSrc !== window.location.href && window.updateCompare) {
     window.updateCompare(prevSrc, imgUrl);
   }
 
   addHistory(prompt, imgUrl, time);
-  showToast(`Done in ${time}s ⚡`);
+  showToast(`Done in ${time}s`);
 }
 
 // ─────────────────────────────────────────────
@@ -237,7 +263,7 @@ function addHistory(prompt, imgUrl, time) {
     <div class="history-thumb">${imgUrl ? `<img src="${imgUrl}">` : '🪑'}</div>
     <div class="history-info">
       <div class="history-prompt">${prompt}</div>
-      <div class="history-time">${time}s · 128 samples</div>
+      <div class="history-time">${time}s · 512 samples</div>
     </div>
   `;
   item.addEventListener('click', () => {
@@ -258,12 +284,15 @@ function addHistory(prompt, imgUrl, time) {
 // Loading overlay
 // ─────────────────────────────────────────────
 const loadingSteps = [
-  [10, 'Submitting to RunPod...'],
-  [25, 'Waiting for GPU...'],
-  [45, 'Loading 3D scene...'],
-  [65, 'Applying materials...'],
-  [80, 'Rendering with Cycles...'],
-  [95, 'Saving output...'],
+  [10,  'Submitting to RunPod...'],
+  [20,  'Waiting for GPU worker...'],
+  [35,  'Open3D point cloud reconstruction...'],
+  [50,  'Loading 3D scene in Blender...'],
+  [65,  'Applying materials & zones...'],
+  [75,  'Preview render (128 samples)...'],
+  [85,  'Claude vision analysis...'],
+  [93,  'Final render (512 samples)...'],
+  [98,  'Saving output...'],
 ];
 let loadingTimer;
 
