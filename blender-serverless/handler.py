@@ -362,6 +362,8 @@ if input_type == "ply":
         if obj.type == "MESH":
             obj.rotation_euler[0] = math.radians(90)
     bpy.ops.object.select_all(action="SELECT")
+    # Blender 3.6 requires single-user mesh data before transform_apply
+    bpy.ops.object.make_single_user(type='ALL', object=True, obdata=True)
     bpy.ops.object.transform_apply(rotation=True)
     print("[rotate] Applied 90° X rotation for PLY (Y-up → Z-up)")
 
@@ -369,6 +371,10 @@ if input_type == "ply":
 for obj in bpy.context.scene.objects:
     if obj.type == "MESH":
         bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.select_all(action='DESELECT')
+        obj.select_set(True)
+        # Ensure single-user mesh data before modifier apply
+        bpy.ops.object.make_single_user(type='SELECTED_OBJECTS', object=True, obdata=True)
         bpy.ops.object.shade_smooth()
         sub = obj.modifiers.new("Subdivision","SUBSURF")
         sub.levels = 1; sub.render_levels = 2
