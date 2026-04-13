@@ -4,7 +4,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
     python3 python3-pip wget xz-utils \
-    libgl1 libglib2.0-0 libgomp1 libsm6 libxrender1 libxext6 \
+    libgl1 libglib2.0-0 libgomp1 \
+    libsm6 libxrender1 libxext6 libx11-6 \
+    libxi6 libxfixes3 libxxf86vm1 \
+    libxkbcommon0 libegl1 libice6 \
+    libglu1-mesa \
     && rm -rf /var/lib/apt/lists/*
 
 # Blender 3.6.8 LTS — official binary with proper CUDA/A40 support
