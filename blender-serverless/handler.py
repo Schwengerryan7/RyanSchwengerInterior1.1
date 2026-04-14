@@ -731,18 +731,11 @@ def handler(job):
                 return {"error": "Blender produced no output", "issues": corrections.get("issues", [])}
 
             with open(final_path, "rb") as f:
-                result = {
+                return {
                     "image_base64": base64.b64encode(f.read()).decode(),
                     "status":       "ok",
                     "claude_notes": corrections.get("issues", []),
                 }
-
-            if glb_path:
-                with open(glb_path, "rb") as f:
-                    result["mesh_base64"] = base64.b64encode(f.read()).decode()
-                print(f"[pipeline] GLB encoded: {os.path.getsize(glb_path)} bytes")
-
-            return result
 
         except subprocess.TimeoutExpired:
             return {"error": "Timed out (600s)"}
