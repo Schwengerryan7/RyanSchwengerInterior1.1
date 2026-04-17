@@ -736,10 +736,10 @@ def handler(job):
 
             # Pass 2 — final (also exports GLB)
             print(f"[pipeline] PASS 2 final | corrections={corrections}")
-            final_path, glb_path = run_blender(mesh_path, prompt, tmpdir,
-                                               do_recon=do_recon, samples=512,
-                                               corrections=corrections, output_name="final.png",
-                                               input_type=input_type)
+            final_path, alt_paths = run_blender(mesh_path, prompt, tmpdir,
+                                                do_recon=do_recon, samples=512,
+                                                corrections=corrections, output_name="final.png",
+                                                input_type=input_type)
 
             if not final_path:
                 return {"error": "Blender produced no output", "issues": corrections.get("issues", [])}
