@@ -190,18 +190,13 @@ async function triggerRender() {
 
     if (result && result.image_base64) {
       const imgUrl = `data:image/png;base64,${result.image_base64}`;
-      showResult(imgUrl, prompt, elapsed);
 
-      // Load returned GLB into model-viewer for 3D rotation
-      if (result.mesh_base64) {
-        const glbBlob = new Blob(
-          [Uint8Array.from(atob(result.mesh_base64), c => c.charCodeAt(0))],
-          { type: 'model/gltf-binary' }
-        );
-        const glbUrl = URL.createObjectURL(glbBlob);
-        document.getElementById('model-viewer').src = glbUrl;
-        showToast('3D model ready — switch to 3D view to rotate');
+      // Build carousel: main view + alt views
+      const allImages = [imgUrl];
+      if (result.alt_images && result.alt_images.length > 0) {
+        result.alt_images.forEach(b64 => allImages.push(`data:image/jpeg;base64,${b64}`));
       }
+      showResult(imgUrl, prompt, elapsed, allImages);
 
       if (result.claude_notes && result.claude_notes.length > 0) {
         console.log('[Claude notes]', result.claude_notes);
@@ -225,7 +220,7 @@ async function triggerRender() {
 // ─────────────────────────────────────────────
 // Show result
 // ─────────────────────────────────────────────
-function showResult(imgUrl, prompt, time) {
+function showResult(imgUrl, prompt, time, allImages) {
   const prevSrc = document.getElementById('render-img').src;
 
   const renderImg = document.getElementById('render-img');
@@ -233,6 +228,29 @@ function showResult(imgUrl, prompt, time) {
   renderImg.classList.add('visible');
   document.getElementById('empty-viewer').style.display = 'none';
   setView('render');
+
+  // ── Carousel for multi-angle views ──────────────────────────────────────────
+  if (allImages && allImages.length > 1) {
+    let carouselEl = document.getElementById('angle-carousel');
+    if (!carouselEl) {
+      carouselEl = document.createElement('div');
+      carouselEl.id = 'angle-carousel';
+      carouselEl.style.cssText = 'display:flex;gap:8px;padding:8px 0;justify-content:center;';
+      renderImg.parentElement.appendChild(carouselEl);
+    }
+    carouselEl.innerHTML = '';
+    allImages.forEach((url, i) => {
+      const thumb = document.createElement('img');
+      thumb.src = url;
+      thumb.style.cssText = `width:72px;height:72px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid ${i===0?'var(--accent)':'transparent'};`;
+      thumb.addEventListener('click', () => {
+        renderImg.src = url;
+        carouselEl.querySelectorAll('img').forEach(t => t.style.borderColor = 'transparent');
+        thumb.style.borderColor = 'var(--accent)';
+      });
+      carouselEl.appendChild(thumb);
+    });
+  }
 
   const ri = document.getElementById('result-img');
   if (ri) {
@@ -355,3 +373,4 @@ function showToast(msg) {
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 3000);
 }
+
