@@ -200,13 +200,22 @@ async function triggerRender() {
 
       // Load GLB into model-viewer for interactive 3D rotation
       if (result.mesh_base64) {
+        console.log('[3D] GLB received, loading into model-viewer...');
         const glbBlob = new Blob(
           [Uint8Array.from(atob(result.mesh_base64), c => c.charCodeAt(0))],
           { type: 'model/gltf-binary' }
         );
         const glbUrl = URL.createObjectURL(glbBlob);
-        document.getElementById('model-viewer').src = glbUrl;
-        showToast('3D model ready — click "3D" to rotate');
+        const mv = document.getElementById('model-viewer');
+        mv.src = glbUrl;
+        mv.setAttribute('auto-rotate', '');
+        mv.setAttribute('camera-controls', '');
+        mv.setAttribute('shadow-intensity', '1');
+        // Auto-switch to 3D view after short delay so render shows first
+        setTimeout(() => setView('3d'), 1500);
+        showToast('3D model loaded — drag to rotate!');
+      } else {
+        console.log('[3D] No mesh_base64 in response — GLB was too large or export failed');
       }
 
       if (result.claude_notes && result.claude_notes.length > 0) {
