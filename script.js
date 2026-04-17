@@ -313,16 +313,31 @@ async function triggerRender() {
           { type: 'model/gltf-binary' }
         );
         const glbUrl = URL.createObjectURL(glbBlob);
+        window._glbUrl = glbUrl;
+
         const mv = document.getElementById('model-viewer');
         if (mv) {
           mv.setAttribute('camera-controls', '');
           mv.setAttribute('auto-rotate', '');
           mv.setAttribute('shadow-intensity', '1');
-          mv.setAttribute('auto-rotate-delay', '0');
           mv.src = glbUrl;
-          showToast('3D model ready — switching to 3D view');
-          setTimeout(() => setView('3d'), 1800);
         }
+
+        // Add a prominent 3D button in the result section
+        const dl = document.getElementById('download-btn');
+        if (dl && !document.getElementById('view3d-btn')) {
+          const btn3d = document.createElement('a');
+          btn3d.id = 'view3d-btn';
+          btn3d.textContent = '⟳ View in 3D';
+          btn3d.style.cssText = 'display:inline-block;margin-left:12px;padding:8px 16px;background:var(--accent,#7c6af7);color:#fff;border-radius:8px;cursor:pointer;font-weight:600;text-decoration:none;';
+          btn3d.addEventListener('click', () => {
+            setView('3d');
+            const viewer = document.getElementById('model-viewer');
+            if (viewer) viewer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          });
+          dl.parentElement.appendChild(btn3d);
+        }
+        showToast('3D model ready — click ⟳ View in 3D');
       }
 
       if (result.claude_notes && result.claude_notes.length > 0) {
