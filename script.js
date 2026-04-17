@@ -103,13 +103,23 @@ function setView(view) {
   document.getElementById('btn-render').classList.toggle('active', view === 'render');
   document.getElementById('btn-3d').classList.toggle('active', view === '3d');
   rv.style.display = view === 'render' ? 'flex' : 'none';
-  mv.style.display = view === '3d' ? 'block' : 'none';
-  if (view === '3d') {
-    mv.style.flex = '1';
-    // If we have a PLY file, show Three.js 3D viewer
-    if (currentFile && currentFile.name.toLowerCase().endsWith('.ply')) {
-      init3DViewer(mv);
+
+  if (view === '3d' && currentFile && currentFile.name.toLowerCase().endsWith('.ply')) {
+    // Use our own Three.js div, hide model-viewer
+    if (mv) mv.style.display = 'none';
+    let pv = document.getElementById('ply-viewer');
+    if (!pv) {
+      pv = document.createElement('div');
+      pv.id = 'ply-viewer';
+      pv.style.cssText = 'width:100%;flex:1;min-height:420px;display:block;';
+      mv ? mv.parentNode.insertBefore(pv, mv) : document.body.appendChild(pv);
     }
+    pv.style.display = 'block';
+    init3DViewer(pv);
+  } else {
+    const pv = document.getElementById('ply-viewer');
+    if (pv) pv.style.display = 'none';
+    if (mv) { mv.style.display = view === '3d' ? 'block' : 'none'; mv.style.flex = '1'; }
   }
 }
 
@@ -121,8 +131,10 @@ let _3dViewerReady = false;
 function init3DViewer(container) {
   if (_3dViewerReady) return;
 
-  container.innerHTML = '<canvas id="ply-canvas" style="width:100%;height:100%;display:block;"></canvas>';
-  const canvas = document.getElementById('ply-canvas');
+  container.innerHTML = '';
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'width:100%;height:100%;display:block;';
+  container.appendChild(canvas);
 
   function loadScript(src, cb) {
     const s = document.createElement('script'); s.src = src; s.onload = cb; document.head.appendChild(s);
