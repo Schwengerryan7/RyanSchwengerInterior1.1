@@ -533,17 +533,26 @@ print(f"[render] samples={samples}  Starting Cycles render...")
 bpy.ops.render.render(write_still=True)
 print(f"[render] Saved → {output_png}")
 
-# ── Export GLB for 3D viewer (chair only, no floor/lights) ─────────────────────
-output_glb = output_png.replace(".png", ".glb")
-bpy.ops.object.select_all(action='DESELECT')
-for obj in bpy.context.scene.objects:
-    if obj.type == 'MESH' and obj.name != 'Floor':
-        obj.select_set(True)
-try:
-    bpy.ops.export_scene.gltf(filepath=output_glb, export_format='GLB', use_selection=True)
-    print(f"[export] GLB saved → {output_glb}")
-except Exception as e:
-    print(f"[export] GLB failed: {e}")
+# ── Additional angle renders (only on final pass — samples > 200) ───────────────
+if samples > 200:
+    alt_angles = [
+        (center.x - dist*0.55, center.y + dist*1.0, center.z + dist*0.45),  # back-right
+        (center.x + dist*0.02, center.y - dist*1.3, center.z + dist*0.20),  # front straight
+    ]
+    scene.cycles.samples = 256
+    scene.render.resolution_x = 768
+    scene.render.resolution_y = 768
+    scene.render.image_settings.file_format  = "JPEG"
+    scene.render.image_settings.quality      = 82
+    for i, alt_loc in enumerate(alt_angles):
+        alt_vec = Vector(alt_loc)
+        cam.location       = alt_vec
+        cam.rotation_euler = (center - alt_vec).to_track_quat("-Z","Y").to_euler()
+        cam.data.dof.focus_distance = (alt_vec - center).length
+        alt_path = output_png.replace(".png", f"_alt{i}.jpg")
+        scene.render.filepath = alt_path
+        bpy.ops.render.render(write_still=True)
+        print(f"[render] alt{i} saved → {alt_path}")
 """
 
 
@@ -587,10 +596,14 @@ def run_blender(mesh_path: str, prompt: str, tmpdir: str,
         print(f"[render] output file size: {sz} bytes")
         if sz < 500:
             print("[render] WARN: file is suspiciously small — likely a black/empty render")
-        glb_path = output_png.replace(".png", ".glb")
-        return output_png, glb_path if os.path.exists(glb_path) else None
+        alt_paths = []
+        for i in range(2):
+            p = output_png.replace(".png", f"_alt{i}.jpg")
+            if os.path.exists(p):
+                alt_paths.append(p)
+        return output_png, alt_paths
     print("[render] ERROR: output PNG not found")
-    return None, None
+    return None, []
 
 
 def analyze_with_claude(image_path: str, prompt: str) -> dict:
@@ -713,6 +726,7 @@ def handler(job):
                                           corrections={}, output_name="preview.png",
                                           input_type=input_type)
 
+
             # Claude vision
             corrections = {}
             if preview_path:
@@ -731,11 +745,21 @@ def handler(job):
                 return {"error": "Blender produced no output", "issues": corrections.get("issues", [])}
 
             with open(final_path, "rb") as f:
-                return {
+                result = {
                     "image_base64": base64.b64encode(f.read()).decode(),
                     "status":       "ok",
                     "claude_notes": corrections.get("issues", []),
                 }
+
+            if alt_paths:
+                alt_b64 = []
+                for p in alt_paths:
+                    with open(p, "rb") as f:
+                        alt_b64.append(base64.b64encode(f.read()).decode())
+                result["alt_images"] = alt_b64
+                print(f"[pipeline] {len(alt_b64)} alt views encoded")
+
+            return result
 
         except subprocess.TimeoutExpired:
             return {"error": "Timed out (600s)"}
