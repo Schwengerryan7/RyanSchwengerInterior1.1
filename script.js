@@ -104,7 +104,7 @@ function setView(view) {
   document.getElementById('btn-3d').classList.toggle('active', view === '3d');
   rv.style.display = view === 'render' ? 'flex' : 'none';
 
-  if (view === '3d' && currentFile && currentFile.name.toLowerCase().endsWith('.ply')) {
+  if (view === '3d' && window._glbUrl) {
     // Use our own Three.js div, hide model-viewer
     if (mv) mv.style.display = 'none';
     let pv = document.getElementById('ply-viewer');
@@ -130,6 +130,7 @@ let _3dViewerReady = false;
 
 function init3DViewer(container) {
   if (_3dViewerReady) return;
+  if (!window._glbUrl) { showToast('No 3D model yet — render first'); return; }
 
   container.innerHTML = '';
   const canvas = document.createElement('canvas');
@@ -141,63 +142,69 @@ function init3DViewer(container) {
   }
 
   const THREE_CDN = 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js';
-  const PLY_CDN   = 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/loaders/PLYLoader.js';
+  const GLTF_CDN  = 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/loaders/GLTFLoader.js';
+  const DRACO_CDN = 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/loaders/DRACOLoader.js';
   const ORBIT_CDN = 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/controls/OrbitControls.js';
 
   function startViewer() {
     const THREE = window.THREE;
     const w = container.clientWidth  || 600;
-    const h = container.clientHeight || 600;
+    const h = container.clientHeight || 500;
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(w, h);
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
     renderer.setClearColor(0x1a1a2e);
 
     const scene  = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a2e);
+
     const camera = new THREE.PerspectiveCamera(45, w / h, 0.01, 100);
-    camera.position.set(0, 1, 3);
+    camera.position.set(0, 1.2, 3.5);
 
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping   = true;
-    controls.dampingFactor   = 0.08;
+    controls.dampingFactor   = 0.07;
     controls.autoRotate      = true;
-    controls.autoRotateSpeed = 1.5;
-    controls.target.set(0, 0, 0);
+    controls.autoRotateSpeed = 1.8;
+    controls.target.set(0, 0.3, 0);
 
     // Lights
-    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-    const sun = new THREE.DirectionalLight(0xfff5e0, 1.8);
-    sun.position.set(3, 6, 4); scene.add(sun);
-    const fill = new THREE.DirectionalLight(0xe0f0ff, 0.6);
-    fill.position.set(-3, 2, -2); scene.add(fill);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    const key = new THREE.DirectionalLight(0xfff5e0, 2.0);
+    key.position.set(4, 8, 5); scene.add(key);
+    const fill = new THREE.DirectionalLight(0xc8e0ff, 0.8);
+    fill.position.set(-4, 3, -3); scene.add(fill);
+    const rim = new THREE.DirectionalLight(0xffffff, 0.5);
+    rim.position.set(0, -2, -5); scene.add(rim);
 
-    // Load PLY
-    const loader = new THREE.PLYLoader();
-    loader.load(URL.createObjectURL(currentFile), (geo) => {
-      geo.computeVertexNormals();
-      geo.computeBoundingBox();
-      const box  = geo.boundingBox;
-      const cx   = (box.min.x + box.max.x) / 2;
-      const cy   = (box.min.y + box.max.y) / 2;
-      const cz   = (box.min.z + box.max.z) / 2;
-      const size = Math.max(box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z);
-      geo.translate(-cx, -cy, -cz);
-      const scale = 2 / (size || 1);
+    // Load GLB with Draco
+    const dracoLoader = new THREE.DRACOLoader();
+    dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
 
-      const mat = new THREE.MeshStandardMaterial({
-        color: geo.hasAttribute('color') ? 0xffffff : 0xc4a570,
-        vertexColors: geo.hasAttribute('color'),
-        roughness: 0.65,
-        metalness: 0.05,
-      });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.scale.setScalar(scale);
-      mesh.rotation.x = -Math.PI / 2; // PLY Y-up → Z-up
-      scene.add(mesh);
+    const loader = new THREE.GLTFLoader();
+    loader.setDRACOLoader(dracoLoader);
+    loader.load(window._glbUrl, (gltf) => {
+      const model = gltf.scene;
+
+      // Center + scale to fit
+      const box  = new THREE.Box3().setFromObject(model);
+      const size = box.getSize(new THREE.Vector3());
+      const cent = box.getCenter(new THREE.Vector3());
+      const maxD = Math.max(size.x, size.y, size.z);
+      model.position.sub(cent);
+      model.scale.setScalar(2.5 / (maxD || 1));
+
+      scene.add(model);
       controls.update();
       _3dViewerReady = true;
       showToast('Drag to rotate • Scroll to zoom');
+    }, undefined, (err) => {
+      console.error('[3D] GLB load error:', err);
+      showToast('3D load failed: ' + err.message);
     });
 
     (function animate() {
@@ -207,12 +214,20 @@ function init3DViewer(container) {
     })();
   }
 
-  if (window.THREE && window.THREE.PLYLoader && window.THREE.OrbitControls) {
-    startViewer();
-  } else if (window.THREE) {
-    loadScript(PLY_CDN, () => loadScript(ORBIT_CDN, startViewer));
+  const needsGLTF  = !window.THREE || !window.THREE.GLTFLoader;
+  const needsDRACO = !window.THREE || !window.THREE.DRACOLoader;
+
+  if (!window.THREE) {
+    loadScript(THREE_CDN, () =>
+      loadScript(DRACO_CDN, () =>
+        loadScript(GLTF_CDN, () =>
+          loadScript(ORBIT_CDN, startViewer))));
+  } else if (needsGLTF) {
+    loadScript(DRACO_CDN, () =>
+      loadScript(GLTF_CDN, () =>
+        loadScript(ORBIT_CDN, startViewer)));
   } else {
-    loadScript(THREE_CDN, () => loadScript(PLY_CDN, () => loadScript(ORBIT_CDN, startViewer)));
+    startViewer();
   }
 }
 
@@ -304,8 +319,14 @@ async function triggerRender() {
       }
       showResult(imgUrl, prompt, elapsed, allImages);
 
-      // Auto-open 3D viewer after 2s if PLY was uploaded
-      if (currentFile && currentFile.name.toLowerCase().endsWith('.ply')) {
+      // Load GLB into Three.js viewer for interactive 3D rotation
+      if (result.mesh_base64) {
+        const glbBlob = new Blob(
+          [Uint8Array.from(atob(result.mesh_base64), c => c.charCodeAt(0))],
+          { type: 'model/gltf-binary' }
+        );
+        window._glbUrl = URL.createObjectURL(glbBlob);
+        _3dViewerReady = false;
         setTimeout(() => setView('3d'), 2000);
       }
 
