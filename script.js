@@ -1,6 +1,6 @@
 const RUNPOD_API_KEY = 'YOUR_NEW_KEY_HERE';
 const ENDPOINT_ID = '4qqf6weor3acy0';
-const API_URL = `https://cautious-journey-69jrr96g77642rpq4-3001.app.github.dev`;
+const API_URL = `https://cuddly-goggles-779vjg7www74cxg-3001.app.github.dev`;
 
 let currentFile = null;
 let history = [];
