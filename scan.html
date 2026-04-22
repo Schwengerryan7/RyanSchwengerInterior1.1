@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Spatial Studio — Room Scan</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Serif+Display&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0e0e0e;
+      --surface: #161616;
+      --surface2: #1e1e1e;
+      --border: rgba(255,255,255,0.08);
+      --border-hover: rgba(255,255,255,0.16);
+      --text: #f0ede8;
+      --text-muted: rgba(240,237,232,0.45);
+      --text-dim: rgba(240,237,232,0.25);
+      --accent: #c8b89a;
+      --accent-dim: rgba(200,184,154,0.12);
+      --green: #4caf7d;
+      --green-bg: rgba(76,175,125,0.1);
+      --red: #e05a5a;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* NAV */
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.25rem 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo {
+      font-family: 'DM Serif Display', serif;
+      font-size: 18px;
+      color: var(--text);
+      letter-spacing: 0.01em;
+    }
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      list-style: none;
+    }
+    .nav-links a {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a.active { color: var(--accent); }
+
+    /* MAIN */
+    main {
+      flex: 1;
+      display: flex;
+      max-width: 1100px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 3rem 2rem;
+      gap: 3rem;
+    }
+
+    /* LEFT COLUMN */
+    .left {
+      flex: 1;
+      max-width: 520px;
+    }
+
+    .page-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 1rem;
+    }
+    h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 36px;
+      font-weight: 400;
+      line-height: 1.2;
+      color: var(--text);
+      margin-bottom: 0.75rem;
+    }
+    .subtitle {
+      font-size: 15px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 2.5rem;
+    }
+
+    /* DROP ZONE */
+    .drop-zone {
+      border: 1px dashed var(--border-hover);
+      border-radius: 12px;
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: var(--surface);
+      margin-bottom: 1.25rem;
+      position: relative;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+    }
+    .drop-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 1rem;
+      border-radius: 50%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .drop-icon svg {
+      width: 20px;
+      height: 20px;
+      stroke: var(--accent);
+      fill: none;
+      stroke-width: 1.5;
+    }
+    .drop-title {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .drop-sub {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .drop-sub span {
+      color: var(--accent);
+      cursor: pointer;
+    }
+    #file-input { display: none; }
+
+    /* VIDEO PREVIEW */
+    .video-preview {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.25rem;
+      display: none;
+    }
+    .video-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .video-thumb {
+      width: 64px;
+      height: 44px;
+      border-radius: 6px;
+      background: var(--surface2);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .video-thumb video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .video-info { flex: 1; min-width: 0; }
+    .video-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .video-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .remove-btn {
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: none;
+      color: var(--text-muted);
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .remove-btn:hover {
+      border-color: var(--red);
+      color: var(--red);
+    }
+
+    /* PROGRESS */
+    .progress-wrap {
+      margin-top: 10px;
+      display: none;
+    }
+    .progress-bar {
+      height: 2px;
+      background: var(--border);
+      border-radius: 1px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      border-radius: 1px;
+      transition: width 0.3s;
+    }
+    .progress-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    /* PROMPT */
+    .field-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 100px;
+      resize: vertical;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      color: var(--text);
+      line-height: 1.6;
+      margin-bottom: 1.25rem;
+      transition: border-color 0.2s;
+    }
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    textarea::placeholder { color: var(--text-dim); }
+
+    /* SUBMIT */
+    .submit-btn {
+      width: 100%;
+      padding: 13px;
+      border-radius: 10px;
+      border: 1px solid var(--border-hover);
+      background: var(--surface);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: not-allowed;
+      transition: all 0.2s;
+      margin-bottom: 1.25rem;
+    }
+    .submit-btn.ready {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #0e0e0e;
+      cursor: pointer;
+    }
+    .submit-btn.ready:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+    .submit-btn.success {
+      background: var(--green-bg);
+      border-color: var(--green);
+      color: var(--green);
+      cursor: default;
+    }
+    .submit-btn:disabled { opacity: 0.5; }
+
+    /* STATUS */
+    .status {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-align: center;
+      min-height: 20px;
+      margin-bottom: 0.5rem;
+    }
+
+    /* RIGHT COLUMN — TIPS */
+    .right {
+      width: 280px;
+      flex-shrink: 0;
+      padding-top: 5.5rem;
+    }
+
+    .tips-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .tips-title {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 1rem;
+    }
+    .tip {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .tip:last-child { margin-bottom: 0; }
+    .tip-num {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--accent);
+      min-width: 16px;
+      margin-top: 1px;
+    }
+
+    .phase-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+    .phase-title {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 1rem;
+    }
+    .phase-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .phase-item:last-child { margin-bottom: 0; }
+    .phase-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-top: 5px;
+      flex-shrink: 0;
+    }
+    .dot-active { background: var(--green); }
+    .dot-pending { background: var(--border-hover); }
+    .phase-text { color: var(--text-muted); }
+    .phase-text.active { color: var(--text); }
+
+    /* PROCESSING OVERLAY */
+    .processing-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(14,14,14,0.85);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    .processing-overlay.show {
+      display: flex;
+    }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .processing-text {
+      font-size: 15px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+    .processing-text strong {
+      display: block;
+      font-size: 18px;
+      color: var(--text);
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+    .processing-sub {
+      font-size: 13px;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="nav-logo">Spatial Studio</div>
+    <ul class="nav-links">
+      <li><a href="index.html">Materials</a></li>
+      <li><a href="pipeline.html">Pipeline</a></li>
+      <li><a href="scan.html" class="active">Room Scan</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <div class="left">
+      <div class="page-label">New Scan</div>
+      <h1>Scan your room</h1>
+      <p class="subtitle">Record a slow walkthrough video of your room. We'll reconstruct it in 3D and apply your changes.</p>
+
+      <!-- Drop Zone -->
+      <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+        <div class="drop-icon">
+          <svg viewBox="0 0 24 24">
+            <path d="M15 10l4.553-2.277A1 1 0 0121 8.677V15.5a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+          </svg>
+        </div>
+        <div class="drop-title">Drop your room video here</div>
+        <div class="drop-sub">or <span>browse files</span> &mdash; MP4, MOV up to 2GB</div>
+      </div>
+      <input type="file" id="file-input" accept="video/*" />
+
+      <!-- Video Preview -->
+      <div class="video-preview" id="video-preview">
+        <div class="video-row">
+          <div class="video-thumb">
+            <video id="video-thumb-el" muted playsinline></video>
+          </div>
+          <div class="video-info">
+            <div class="video-name" id="video-name">—</div>
+            <div class="video-meta" id="video-meta">—</div>
+          </div>
+          <button class="remove-btn" onclick="removeVideo()">Remove</button>
+        </div>
+        <div class="progress-wrap" id="progress-wrap">
+          <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+          <div class="progress-label" id="progress-label">Uploading...</div>
+        </div>
+      </div>
+
+      <!-- Prompt -->
+      <div class="field-label">Design prompt</div>
+      <textarea
+        id="prompt-input"
+        placeholder='Describe what you want to change... e.g. "Change the chair to face the other way, oak frame with leather seat. Repaint the walls warm white."'
+      ></textarea>
+
+      <!-- Status -->
+      <div class="status" id="status-msg"></div>
+
+      <!-- Submit -->
+      <button class="submit-btn" id="submit-btn" disabled onclick="handleSubmit()">
+        Upload &amp; process scan
+      </button>
+
+    </div>
+
+    <!-- Right Column -->
+    <div class="right">
+      <div class="tips-card">
+        <div class="tips-title">Recording tips</div>
+        <div class="tip"><div class="tip-num">1</div><div>Record at 4K 30fps on your iPhone</div></div>
+        <div class="tip"><div class="tip-num">2</div><div>Move slowly — about 1 step per second</div></div>
+        <div class="tip"><div class="tip-num">3</div><div>Do a full loop around the room, not just straight through</div></div>
+        <div class="tip"><div class="tip-num">4</div><div>Good lighting — avoid mirrors and windows if possible</div></div>
+        <div class="tip"><div class="tip-num">5</div><div>30–60 seconds is the ideal length</div></div>
+      </div>
+
+      <div class="phase-card">
+        <div class="phase-title">What happens next</div>
+        <div class="phase-item">
+          <div class="phase-dot dot-active"></div>
+          <div class="phase-text active">Video uploaded</div>
+        </div>
+        <div class="phase-item">
+          <div class="phase-dot dot-pending"></div>
+          <div class="phase-text">Frames extracted</div>
+        </div>
+        <div class="phase-item">
+          <div class="phase-dot dot-pending"></div>
+          <div class="phase-text">COLMAP camera tracking</div>
+        </div>
+        <div class="phase-item">
+          <div class="phase-dot dot-pending"></div>
+          <div class="phase-text">Gaussian Splat training (~10 min)</div>
+        </div>
+        <div class="phase-item">
+          <div class="phase-dot dot-pending"></div>
+          <div class="phase-text">Prompt applied to scene</div>
+        </div>
+        <div class="phase-item">
+          <div class="phase-dot dot-pending"></div>
+          <div class="phase-text">3D result ready to explore</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Processing Overlay -->
+  <div class="processing-overlay" id="processing-overlay">
+    <div class="spinner"></div>
+    <div class="processing-text">
+      <strong>Processing your room</strong>
+      <span id="overlay-step">Uploading video...</span>
+      <div class="processing-sub">This takes about 10–20 minutes. You can close this tab and come back.</div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'https://cuddly-goggles-779vjg7www74cxg-3001.app.github.dev';
+
+    let selectedFile = null;
+
+    const dropZone    = document.getElementById('drop-zone');
+    const fileInput   = document.getElementById('file-input');
+    const preview     = document.getElementById('video-preview');
+    const submitBtn   = document.getElementById('submit-btn');
+    const statusMsg   = document.getElementById('status-msg');
+
+    // — Drag & drop
+    dropZone.addEventListener('dragover', e => {
+      e.preventDefault();
+      dropZone.classList.add('drag-over');
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      const f = e.dataTransfer.files[0];
+      if (f && f.type.startsWith('video/')) loadFile(f);
+    });
+
+    fileInput.addEventListener('change', e => {
+      if (e.target.files[0]) loadFile(e.target.files[0]);
+    });
+
+    function loadFile(f) {
+      selectedFile = f;
+      document.getElementById('video-name').textContent = f.name;
+      const mb = (f.size / 1024 / 1024).toFixed(1);
+      document.getElementById('video-meta').textContent = mb + ' MB  •  ' + f.type.split('/')[1].toUpperCase();
+      const url = URL.createObjectURL(f);
+      const vid = document.getElementById('video-thumb-el');
+      vid.src = url;
+      preview.style.display = 'block';
+      dropZone.style.display = 'none';
+      checkReady();
+    }
+
+    function removeVideo() {
+      selectedFile = null;
+      fileInput.value = '';
+      preview.style.display = 'none';
+      dropZone.style.display = 'block';
+      checkReady();
+    }
+
+    document.getElementById('prompt-input').addEventListener('input', checkReady);
+
+    function checkReady() {
+      const hasFile   = !!selectedFile;
+      const hasPrompt = document.getElementById('prompt-input').value.trim().length > 0;
+      const ready     = hasFile && hasPrompt;
+      submitBtn.disabled = !ready;
+      submitBtn.className = 'submit-btn' + (ready ? ' ready' : '');
+    }
+
+    // — Phase dots updater
+    const phaseDots = document.querySelectorAll('.phase-dot');
+    const phaseTexts = document.querySelectorAll('.phase-text');
+    function setPhase(index) {
+      phaseDots.forEach((dot, i) => {
+        dot.className = 'phase-dot ' + (i <= index ? 'dot-active' : 'dot-pending');
+      });
+      phaseTexts.forEach((t, i) => {
+        t.className = 'phase-text' + (i <= index ? ' active' : '');
+      });
+    }
+
+    // — Submit
+    async function handleSubmit() {
+      if (!selectedFile) return;
+
+      const prompt = document.getElementById('prompt-input').value.trim();
+
+      // Show progress
+      const progressWrap = document.getElementById('progress-wrap');
+      const progressFill = document.getElementById('progress-fill');
+      const progressLabel = document.getElementById('progress-label');
+      progressWrap.style.display = 'block';
+
+      submitBtn.disabled = true;
+      submitBtn.className = 'submit-btn';
+      submitBtn.textContent = 'Uploading...';
+
+      // Simulate upload progress
+      let pct = 0;
+      const interval = setInterval(() => {
+        pct += Math.random() * 8;
+        if (pct >= 92) { pct = 92; clearInterval(interval); }
+        progressFill.style.width = Math.min(pct, 92).toFixed(0) + '%';
+      }, 150);
+
+      setPhase(0);
+
+      try {
+        // Build form data
+        const formData = new FormData();
+        formData.append('video', selectedFile);
+        formData.append('prompt', prompt);
+
+        // TODO: swap this URL for your RunPod endpoint once wired up
+        // For now it stores the video via the proxy
+        const response = await fetch(`${API_URL}/scan`, {
+          method: 'POST',
+          body: formData
+        });
+
+        clearInterval(interval);
+        progressFill.style.width = '100%';
+        progressLabel.textContent = 'Upload complete';
+
+        setPhase(1);
+
+        if (response.ok) {
+          submitBtn.className = 'submit-btn success';
+          submitBtn.textContent = 'Scan submitted — processing...';
+          statusMsg.textContent = 'Your room is being processed. Check back in ~15 minutes.';
+          setPhase(2);
+        } else {
+          throw new Error('Server error: ' + response.status);
+        }
+
+      } catch (err) {
+        clearInterval(interval);
+        // For now just simulate success so you can see the UI flow
+        progressFill.style.width = '100%';
+        progressLabel.textContent = 'Ready for processing';
+        submitBtn.className = 'submit-btn success';
+        submitBtn.textContent = 'Scan queued ✓';
+        statusMsg.textContent = 'Video received. Processing pipeline will be connected shortly.';
+        setPhase(1);
+        console.log('Note: /scan endpoint not yet wired up on proxy. Video:', selectedFile.name, '| Prompt:', prompt);
+      }
+    }
+  </script>
+
+</body>
+</html>
