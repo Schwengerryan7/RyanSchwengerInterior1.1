@@ -2,6 +2,7 @@ FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
+ENV QT_QPA_PLATFORM=offscreen
 
 # — System dependencies
 RUN apt-get update && apt-get install -y \
