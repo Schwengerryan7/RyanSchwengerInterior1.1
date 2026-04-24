@@ -30,4 +30,4 @@ RUN pip3 install runpod requests numpy Pillow
 # — Copy handler
 COPY handler.py /handler.py
 
-CMD ["python3", "-u", "/handler.py"]
+CMD ["python3", "-u", "/handler.py"]# gs container
