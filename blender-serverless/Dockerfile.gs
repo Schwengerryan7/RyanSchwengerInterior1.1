@@ -24,10 +24,13 @@ RUN pip3 install torch torchvision torchaudio --index-url https://download.pytor
 # — Nerfstudio + gsplat
 RUN pip3 install nerfstudio
 
+# — Gemma 4 / vision model dependencies
+RUN pip3 install transformers accelerate Pillow sentencepiece protobuf
+
 # — RunPod handler deps
-RUN pip3 install runpod requests numpy Pillow
+RUN pip3 install runpod requests numpy
 
 # — Copy handler
-COPY handler.py /handler.py
+COPY handler_gs.py /handler.py
 
-CMD ["python3", "-u", "/handler.py"]# gs container
+CMD ["python3", "-u", "/handler.py"]
