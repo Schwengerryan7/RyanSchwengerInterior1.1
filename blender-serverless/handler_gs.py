@@ -196,8 +196,8 @@ def handler(job):
             result = analyze_scene_with_gemma(frames_dir, workdir)
             scene_result.update(result)
 
-        gemma_thread = threading.Thread(target=run_gemma)
-        gemma_thread.start()
+        # gemma_thread = threading.Thread(target=run_gemma)
+        # gemma_thread.start()
 
         # ── Step 4: Run COLMAP + Nerfstudio (main thread)
         log("Step 4/5: Running COLMAP...")
@@ -278,7 +278,7 @@ def handler(job):
 
         # ── Wait for Gemma to finish
         log("Waiting for Gemma scene analysis to complete...")
-        gemma_thread.join(timeout=120)  # max 2 min wait
+        # gemma_thread.join(timeout=120)  # max 2 min wait
 
         log("Job complete!")
 
