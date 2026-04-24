@@ -306,4 +306,4 @@ def handler(job):
         log("Cleaned up temp files")
 
 
-runpod.serverless.start({"handler": handler})
+runpod.serverless.start({"handler": handler})# force rebuild
