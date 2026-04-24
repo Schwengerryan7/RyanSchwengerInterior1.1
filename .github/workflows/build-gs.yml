@@ -1,0 +1,27 @@
+name: Build & Push Gaussian Splat Image
+
+on:
+  push:
+    paths:
+      - 'blender-serverless/Dockerfile.gs'
+      - 'blender-serverless/handler_gs.py'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: schwengerryan7
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v4
+        with:
+          context: ./blender-serverless
+          file: ./blender-serverless/Dockerfile.gs
+          push: true
+          tags: schwengerryan7/blender-serverless:gs-v1
