@@ -211,7 +211,7 @@ def handler(job):
             f'--image_path "{frames_dir}" '
             f'--ImageReader.single_camera 1 '
             f'--ImageReader.camera_model PINHOLE '
-            f'--SiftExtraction.use_gpu 1'
+            f'--SiftExtraction.use_gpu 0'
         )
         run_cmd(
             f'colmap sequential_matcher '
