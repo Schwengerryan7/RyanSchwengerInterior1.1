@@ -7,7 +7,7 @@ const fs      = require('fs');
 
 const ENDPOINT_ID       = '4qqf6weor3acy0';
 const RECON_ENDPOINT_ID = 'obyg27dl14g8ws';
-const GS_ENDPOINT_ID    = process.env.GS_ENDPOINT_ID || 'PASTE_YOUR_NEW_GS_ENDPOINT_ID_HERE';
+const GS_ENDPOINT_ID    = process.env.GS_ENDPOINT_ID || 'ppgrpcsc18rzc8';
 const RUNPOD_API_KEY    = process.env.RUNPOD_API_KEY;
 const BASE_URL          = `https://api.runpod.ai/v2/${ENDPOINT_ID}`;
 const RECON_URL         = `https://api.runpod.ai/v2/${RECON_ENDPOINT_ID}`;
