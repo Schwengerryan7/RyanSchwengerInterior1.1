@@ -1,12 +1,28 @@
-import runpod, os, subprocess, base64, tempfile, shutil
+import sys
+print(f"[GS] Python {sys.version}", flush=True)
 
-def log(msg):
-    print(f"[GS] {msg}", flush=True)
+try:
+    import runpod
+    print("[GS] runpod OK", flush=True)
+except Exception as e:
+    print(f"[GS] runpod FAILED: {e}", flush=True)
+    sys.exit(1)
+
+try:
+    import subprocess, base64, tempfile, shutil, os
+    print("[GS] stdlib OK", flush=True)
+except Exception as e:
+    print(f"[GS] stdlib FAILED: {e}", flush=True)
+    sys.exit(1)
+
+print("[GS] All imports OK - starting handler", flush=True)
 
 env = os.environ.copy()
 env["QT_QPA_PLATFORM"] = "offscreen"
 env["DISPLAY"] = ""
-env["MESA_GL_VERSION_OVERRIDE"] = "3.3"
+
+def log(msg):
+    print(f"[GS] {msg}", flush=True)
 
 def run_cmd(cmd, cwd=None):
     log(f"$ {cmd}")
@@ -37,67 +53,57 @@ def handler(job):
         os.makedirs(d, exist_ok=True)
 
     try:
-        # Save video
         log("Saving video...")
         with open(video, "wb") as f:
             f.write(base64.b64decode(video_b64))
 
-        # Extract frames
         log("Extracting frames...")
         run_cmd(f'ffmpeg -i "{video}" -vf "fps=2,scale=960:-1" -q:v 2 "{frames}/frame_%04d.jpg"')
         frame_list = [f for f in os.listdir(frames) if f.endswith('.jpg')]
-        log(f"{len(frame_list)} frames extracted")
+        log(f"{len(frame_list)} frames")
         if len(frame_list) < 10:
             return {"error": f"Too few frames: {len(frame_list)}"}
 
-        # COLMAP - feature extraction (CPU, no GPU/display)
-        log("COLMAP feature extraction...")
         db = os.path.join(colmap_dir, "db.db")
+        log("COLMAP feature extraction...")
         run_cmd(f'colmap feature_extractor --database_path "{db}" --image_path "{frames}" --ImageReader.single_camera 1 --SiftExtraction.use_gpu 0 --SiftExtraction.max_image_size 1000')
 
-        # COLMAP - matching
         log("COLMAP matching...")
         run_cmd(f'colmap sequential_matcher --database_path "{db}" --SequentialMatching.overlap 10')
 
-        # COLMAP - reconstruction
         log("COLMAP reconstruction...")
         run_cmd(f'colmap mapper --database_path "{db}" --image_path "{frames}" --output_path "{sparse}"')
 
         sparse_0 = os.path.join(sparse, "0")
         if not os.path.exists(sparse_0):
-            return {"error": "COLMAP reconstruction failed - no sparse model"}
-        log("COLMAP done!")
+            return {"error": "COLMAP failed"}
 
-        # Convert to nerfstudio format
-        log("Converting to nerfstudio format...")
+        log("ns-process-data...")
         run_cmd(f'ns-process-data images --data "{frames}" --output-dir "{ns_data}" --skip-colmap --colmap-model-path "{sparse_0}" --num-downscales 1')
 
-        # Train
-        log("Training splatfacto...")
-        run_cmd(f'ns-train splatfacto --data "{ns_data}" --output-dir "{ns_out}" --max-num-iterations 5000 --vis none --pipeline.model.cull-alpha-thresh 0.005')
+        log("Training...")
+        run_cmd(f'ns-train splatfacto --data "{ns_data}" --output-dir "{ns_out}" --max-num-iterations 5000 --vis none')
 
-        # Export
-        log("Exporting PLY...")
+        log("Exporting...")
         config = None
         for root, _, files in os.walk(ns_out):
             for f in files:
                 if f == "config.yml":
                     config = os.path.join(root, f)
         if not config:
-            return {"error": "No config.yml found"}
+            return {"error": "No config.yml"}
 
         run_cmd(f'ns-export gaussian-splat --load-config "{config}" --output-dir "{ply_out}"')
-
         plys = [f for f in os.listdir(ply_out) if f.endswith('.ply')]
         if not plys:
-            return {"error": "No PLY exported"}
+            return {"error": "No PLY"}
 
         ply_path = os.path.join(ply_out, plys[0])
         size_mb = os.path.getsize(ply_path) / 1024 / 1024
         with open(ply_path, "rb") as f:
             ply_b64 = base64.b64encode(f.read()).decode()
 
-        log(f"SUCCESS! PLY: {size_mb:.1f} MB")
+        log(f"SUCCESS! {size_mb:.1f} MB")
         return {"success": True, "ply_b64": ply_b64, "ply_size_mb": round(size_mb,1), "frames": len(frame_list), "prompt": prompt}
 
     except Exception as e:
@@ -106,4 +112,5 @@ def handler(job):
     finally:
         shutil.rmtree(w, ignore_errors=True)
 
+print("[GS] Starting runpod serverless...", flush=True)
 runpod.serverless.start({"handler": handler})
