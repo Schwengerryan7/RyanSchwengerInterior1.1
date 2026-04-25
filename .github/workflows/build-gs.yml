@@ -24,4 +24,4 @@ jobs:
           context: ./blender-serverless
           file: ./blender-serverless/Dockerfile.gs
           push: true
-          tags: schwengerryan7/blender-serverless:gs-v5
+          tags: schwengerryan7/blender-serverless:gs-v6
