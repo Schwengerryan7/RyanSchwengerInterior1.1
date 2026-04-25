@@ -31,4 +31,4 @@ RUN pip3 install runpod numpy Pillow requests
 
 COPY handler_gs.py /handler.py
 
-CMD ["python3", "-u", "/handler.py"]
+CMD ["python3", "-u", "/handler.py"]# v13 mesa software opengl
