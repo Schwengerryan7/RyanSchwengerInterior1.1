@@ -1,10 +1,7 @@
 """
-Spatial Studio - Gaussian Splatting Handler v13
-Modeled after Luma AI's approach:
-- High quality COLMAP with exhaustive matching
-- 30,000 training iterations  
-- Full resolution input
-- Software OpenGL to bypass display issues
+Spatial Studio - Gaussian Splatting Handler v15
+Fix: added --SiftMatching.use_gpu 0 to sequential_matcher
+(was crashing with OpenGLContextManager SIGABRT)
 """
 import runpod
 import os
@@ -15,7 +12,7 @@ import tempfile
 import shutil
 
 print(f"[GS] Python {sys.version}", flush=True)
-print(f"[GS] Spatial Studio GS Pipeline v13 starting...", flush=True)
+print(f"[GS] Spatial Studio GS Pipeline v15 starting...", flush=True)
 
 # Check all dependencies on startup
 for cmd in ["ffmpeg", "colmap", "ns-train", "ns-process-data", "ns-export"]:
@@ -103,7 +100,8 @@ def handler(job):
         run(
             f'colmap sequential_matcher '
             f'--database_path "{db}" '
-            f'--SequentialMatching.overlap 20'
+            f'--SequentialMatching.overlap 20 '
+            f'--SiftMatching.use_gpu 0'
         )
 
         log("COLMAP reconstruction...")
