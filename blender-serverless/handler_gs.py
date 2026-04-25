@@ -4,7 +4,6 @@ import subprocess
 import base64
 import tempfile
 import shutil
-import json
 
 def log(msg):
     print(f"[GS] {msg}", flush=True)
@@ -12,10 +11,10 @@ def log(msg):
 def run_cmd(cmd, cwd=None):
     log(f"Running: {cmd}")
     result = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True)
-    if result.stdout: log(result.stdout[-1000:])
-    if result.stderr: log(result.stderr[-1000:])
+    if result.stdout: log(f"STDOUT: {result.stdout[-3000:]}")
+    if result.stderr: log(f"STDERR: {result.stderr[-3000:]}")
     if result.returncode != 0:
-        raise RuntimeError(f"Failed: {cmd}\n{result.stderr[-500:]}")
+        raise RuntimeError(f"Failed ({result.returncode}): {cmd}\nSTDOUT: {result.stdout[-2000:]}\nSTDERR: {result.stderr[-2000:]}")
     return result
 
 def handler(job):
@@ -39,7 +38,7 @@ def handler(job):
         log("Step 1: Saving video...")
         with open(video_path, "wb") as f:
             f.write(base64.b64decode(video_b64))
-        log(f"Video: {os.path.getsize(video_path)/1024/1024:.1f} MB")
+        log(f"Video saved: {os.path.getsize(video_path)/1024/1024:.1f} MB")
 
         # Step 2: Extract frames
         log("Step 2: Extracting frames...")
@@ -47,15 +46,20 @@ def handler(job):
         frames = [f for f in os.listdir(frames_dir) if f.endswith('.jpg')]
         log(f"Extracted {len(frames)} frames")
         if len(frames) < 15:
-            return {"error": f"Too few frames: {len(frames)}. Record a longer video."}
+            return {"error": f"Too few frames: {len(frames)}"}
 
-        # Step 3: COLMAP via ns-process-data (handles display issues internally)
-        log("Step 3: Running ns-process-data...")
+        # Step 3: Check COLMAP is available
+        log("Step 3: Checking COLMAP...")
+        result = subprocess.run("which colmap && colmap --version", shell=True, capture_output=True, text=True)
+        log(f"COLMAP check: {result.stdout} {result.stderr}")
+
+        # Step 4: ns-process-data
+        log("Step 4: Running ns-process-data...")
         ns_data_dir = os.path.join(workdir, "ns_data")
-        run_cmd(f'ns-process-data images --data "{frames_dir}" --output-dir "{ns_data_dir}"')
+        run_cmd(f'ns-process-data images --data "{frames_dir}" --output-dir "{ns_data_dir}" --verbose')
 
-        # Step 4: Train Gaussian Splat
-        log("Step 4: Training Gaussian Splat...")
+        # Step 5: Train
+        log("Step 5: Training Gaussian Splat...")
         ns_output_dir = os.path.join(workdir, "ns_output")
         run_cmd(
             f'ns-train splatfacto '
@@ -65,8 +69,8 @@ def handler(job):
             f'--vis none'
         )
 
-        # Step 5: Export PLY
-        log("Step 5: Exporting PLY...")
+        # Step 6: Export
+        log("Step 6: Exporting PLY...")
         config_path = None
         for root, dirs, files in os.walk(ns_output_dir):
             for f in files:
@@ -96,12 +100,12 @@ def handler(job):
             "ply_size_mb": round(ply_size, 1),
             "frame_count": len(frames),
             "prompt": prompt,
-            "message": f"Gaussian Splat complete. {len(frames)} frames processed."
+            "message": f"Gaussian Splat complete. {len(frames)} frames."
         }
 
     except Exception as e:
-        log(f"Error: {e}")
-        return {"error": str(e)}
+        log(f"EXCEPTION: {str(e)}")
+        return {"error": str(e)[:3000]}
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 
