@@ -21,3 +21,4 @@ RUN pip3 install nerfstudio runpod numpy Pillow requests
 
 COPY handler_gs.py /handler.py
 CMD ["python3", "-u", "/handler.py"]
+ENV DISPLAY=""
