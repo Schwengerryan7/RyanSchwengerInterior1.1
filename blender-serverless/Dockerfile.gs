@@ -1,4 +1,4 @@
-FROM dromni/nerfstudio:latest
+FROM ghcr.io/nerfstudio-project/nerfstudio:latest
 
 ENV QT_QPA_PLATFORM=offscreen
 
