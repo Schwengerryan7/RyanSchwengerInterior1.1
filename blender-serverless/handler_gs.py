@@ -56,7 +56,7 @@ def handler(job):
         # Step 4: ns-process-data
         log("Step 4: Running ns-process-data...")
         ns_data_dir = os.path.join(workdir, "ns_data")
-        run_cmd(f'ns-process-data images --data "{frames_dir}" --output-dir "{ns_data_dir}" --verbose')
+        run_cmd(f'ns-process-data images --num-downscales 2 --data "{frames_dir}" --output-dir "{ns_data_dir}" --verbose')
 
         # Step 5: Train
         log("Step 5: Training Gaussian Splat...")
