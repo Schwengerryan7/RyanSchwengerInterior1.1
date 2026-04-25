@@ -1,112 +1,109 @@
-import runpod
-import os
-import subprocess
-import base64
-import tempfile
-import shutil
+import runpod, os, subprocess, base64, tempfile, shutil
 
 def log(msg):
     print(f"[GS] {msg}", flush=True)
 
+env = os.environ.copy()
+env["QT_QPA_PLATFORM"] = "offscreen"
+env["DISPLAY"] = ""
+env["MESA_GL_VERSION_OVERRIDE"] = "3.3"
+
 def run_cmd(cmd, cwd=None):
-    log(f"Running: {cmd}")
-    result = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True)
-    if result.stdout: log(f"STDOUT: {result.stdout[-3000:]}")
-    if result.stderr: log(f"STDERR: {result.stderr[-3000:]}")
-    if result.returncode != 0:
-        raise RuntimeError(f"Failed ({result.returncode}): {cmd}\nSTDOUT: {result.stdout[-2000:]}\nSTDERR: {result.stderr[-2000:]}")
-    return result
+    log(f"$ {cmd}")
+    r = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True, env=env)
+    if r.stdout: log(r.stdout[-2000:])
+    if r.stderr: log(r.stderr[-2000:])
+    if r.returncode != 0:
+        raise RuntimeError(f"FAILED: {r.stderr[-1000:]}")
+    return r
 
 def handler(job):
-    job_input = job.get("input", {})
-    video_b64 = job_input.get("video_b64")
-    prompt    = job_input.get("prompt", "")
-    filename  = job_input.get("filename", "room.mp4")
-
+    inp = job.get("input", {})
+    video_b64 = inp.get("video_b64")
+    prompt = inp.get("prompt", "")
+    filename = inp.get("filename", "room.mp4")
     if not video_b64:
-        return {"error": "No video provided"}
+        return {"error": "No video"}
 
-    workdir    = tempfile.mkdtemp(prefix="gs_")
-    video_path = os.path.join(workdir, filename)
-    frames_dir = os.path.join(workdir, "images")
-    output_dir = os.path.join(workdir, "output")
-    os.makedirs(frames_dir, exist_ok=True)
-    os.makedirs(output_dir, exist_ok=True)
+    w = tempfile.mkdtemp(prefix="gs_")
+    video = os.path.join(w, filename)
+    frames = os.path.join(w, "images")
+    colmap_dir = os.path.join(w, "colmap")
+    sparse = os.path.join(colmap_dir, "sparse")
+    ns_data = os.path.join(w, "ns_data")
+    ns_out = os.path.join(w, "ns_out")
+    ply_out = os.path.join(w, "ply")
+    for d in [frames, colmap_dir, sparse, ns_data, ns_out, ply_out]:
+        os.makedirs(d, exist_ok=True)
 
     try:
-        # Step 1: Save video
-        log("Step 1: Saving video...")
-        with open(video_path, "wb") as f:
+        # Save video
+        log("Saving video...")
+        with open(video, "wb") as f:
             f.write(base64.b64decode(video_b64))
-        log(f"Video saved: {os.path.getsize(video_path)/1024/1024:.1f} MB")
 
-        # Step 2: Extract frames
-        log("Step 2: Extracting frames...")
-        run_cmd(f'ffmpeg -i "{video_path}" -vf "fps=2,scale=1920:-1" -q:v 1 "{frames_dir}/frame_%04d.jpg"')
-        frames = [f for f in os.listdir(frames_dir) if f.endswith('.jpg')]
-        log(f"Extracted {len(frames)} frames")
-        if len(frames) < 15:
-            return {"error": f"Too few frames: {len(frames)}"}
+        # Extract frames
+        log("Extracting frames...")
+        run_cmd(f'ffmpeg -i "{video}" -vf "fps=2,scale=960:-1" -q:v 2 "{frames}/frame_%04d.jpg"')
+        frame_list = [f for f in os.listdir(frames) if f.endswith('.jpg')]
+        log(f"{len(frame_list)} frames extracted")
+        if len(frame_list) < 10:
+            return {"error": f"Too few frames: {len(frame_list)}"}
 
-        # Step 3: Check COLMAP is available
-        log("Step 3: Checking COLMAP...")
-        result = subprocess.run("which colmap && colmap --version", shell=True, capture_output=True, text=True)
-        log(f"COLMAP check: {result.stdout} {result.stderr}")
+        # COLMAP - feature extraction (CPU, no GPU/display)
+        log("COLMAP feature extraction...")
+        db = os.path.join(colmap_dir, "db.db")
+        run_cmd(f'colmap feature_extractor --database_path "{db}" --image_path "{frames}" --ImageReader.single_camera 1 --SiftExtraction.use_gpu 0 --SiftExtraction.max_image_size 1000')
 
-        # Step 4: ns-process-data
-        log("Step 4: Running ns-process-data...")
-        ns_data_dir = os.path.join(workdir, "ns_data")
-        run_cmd(f'ns-process-data images --num-downscales 2 --data "{frames_dir}" --output-dir "{ns_data_dir}" --verbose')
+        # COLMAP - matching
+        log("COLMAP matching...")
+        run_cmd(f'colmap sequential_matcher --database_path "{db}" --SequentialMatching.overlap 10')
 
-        # Step 5: Train
-        log("Step 5: Training Gaussian Splat...")
-        ns_output_dir = os.path.join(workdir, "ns_output")
-        run_cmd(
-            f'ns-train splatfacto '
-            f'--data "{ns_data_dir}" '
-            f'--output-dir "{ns_output_dir}" '
-            f'--max-num-iterations 7000 '
-            f'--vis none'
-        )
+        # COLMAP - reconstruction
+        log("COLMAP reconstruction...")
+        run_cmd(f'colmap mapper --database_path "{db}" --image_path "{frames}" --output_path "{sparse}"')
 
-        # Step 6: Export
-        log("Step 6: Exporting PLY...")
-        config_path = None
-        for root, dirs, files in os.walk(ns_output_dir):
+        sparse_0 = os.path.join(sparse, "0")
+        if not os.path.exists(sparse_0):
+            return {"error": "COLMAP reconstruction failed - no sparse model"}
+        log("COLMAP done!")
+
+        # Convert to nerfstudio format
+        log("Converting to nerfstudio format...")
+        run_cmd(f'ns-process-data images --data "{frames}" --output-dir "{ns_data}" --skip-colmap --colmap-model-path "{sparse_0}" --num-downscales 1')
+
+        # Train
+        log("Training splatfacto...")
+        run_cmd(f'ns-train splatfacto --data "{ns_data}" --output-dir "{ns_out}" --max-num-iterations 5000 --vis none --pipeline.model.cull-alpha-thresh 0.005')
+
+        # Export
+        log("Exporting PLY...")
+        config = None
+        for root, _, files in os.walk(ns_out):
             for f in files:
                 if f == "config.yml":
-                    config_path = os.path.join(root, f)
-                    break
+                    config = os.path.join(root, f)
+        if not config:
+            return {"error": "No config.yml found"}
 
-        if not config_path:
-            return {"error": "Training complete but config not found"}
+        run_cmd(f'ns-export gaussian-splat --load-config "{config}" --output-dir "{ply_out}"')
 
-        run_cmd(f'ns-export gaussian-splat --load-config "{config_path}" --output-dir "{output_dir}"')
+        plys = [f for f in os.listdir(ply_out) if f.endswith('.ply')]
+        if not plys:
+            return {"error": "No PLY exported"}
 
-        ply_files = [f for f in os.listdir(output_dir) if f.endswith('.ply')]
-        if not ply_files:
-            return {"error": "PLY export failed"}
-
-        ply_path = os.path.join(output_dir, ply_files[0])
-        ply_size = os.path.getsize(ply_path) / 1024 / 1024
-
+        ply_path = os.path.join(ply_out, plys[0])
+        size_mb = os.path.getsize(ply_path) / 1024 / 1024
         with open(ply_path, "rb") as f:
-            ply_b64 = base64.b64encode(f.read()).decode("utf-8")
+            ply_b64 = base64.b64encode(f.read()).decode()
 
-        log(f"Done! PLY: {ply_size:.1f} MB")
-        return {
-            "success": True,
-            "ply_b64": ply_b64,
-            "ply_size_mb": round(ply_size, 1),
-            "frame_count": len(frames),
-            "prompt": prompt,
-            "message": f"Gaussian Splat complete. {len(frames)} frames."
-        }
+        log(f"SUCCESS! PLY: {size_mb:.1f} MB")
+        return {"success": True, "ply_b64": ply_b64, "ply_size_mb": round(size_mb,1), "frames": len(frame_list), "prompt": prompt}
 
     except Exception as e:
-        log(f"EXCEPTION: {str(e)}")
-        return {"error": str(e)[:3000]}
+        log(f"ERROR: {e}")
+        return {"error": str(e)[:2000]}
     finally:
-        shutil.rmtree(workdir, ignore_errors=True)
+        shutil.rmtree(w, ignore_errors=True)
 
 runpod.serverless.start({"handler": handler})
