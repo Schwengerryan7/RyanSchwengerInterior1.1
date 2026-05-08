@@ -4,7 +4,8 @@
   "description": "Spatial AI Prototype - Interior scanning dashboard",
   "main": "compare.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "serve": "npx serve . -p 3000"
   },
   "repository": {
     "type": "git",

@@ -27,6 +27,7 @@
         <!-- FIX: removed inline onclick — wired in script.js -->
         <button class="toggle-btn active" id="btn-render">Render</button>
         <button class="toggle-btn" id="btn-3d">3D View</button>
+        <button class="toggle-btn" id="btn-floorplan">Floor Plan</button>
       </div>
     </div>
 
@@ -45,6 +46,22 @@
       shadow-intensity="1"
       environment-image="neutral"
     ></model-viewer>
+
+    <!-- Floor Plan View -->
+    <div class="floor-plan-view" id="floor-plan-view">
+      <div class="fp-toolbar">
+        <div class="fp-tools">
+          <button class="fp-tool-btn" id="fp-fit" title="Fit to view">⊡</button>
+          <button class="fp-tool-btn" id="fp-zoom-in" title="Zoom in">+</button>
+          <button class="fp-tool-btn" id="fp-zoom-out" title="Zoom out">−</button>
+        </div>
+        <div class="fp-actions">
+          <button class="fp-action-btn" id="fp-export-png">Export PNG</button>
+          <button class="fp-generate-btn" id="fp-generate">Generate from PLY</button>
+        </div>
+      </div>
+      <canvas id="fp-canvas"></canvas>
+    </div>
 
     <div class="render-overlay" id="render-overlay">
       <div class="spinner"></div>
@@ -170,6 +187,7 @@
 <script src="script.js"></script>
 <script src="viewer.js"></script>
 <script src="compare.js"></script>
+<script src="floor-plan.js"></script>
 
 </body>
 </html>

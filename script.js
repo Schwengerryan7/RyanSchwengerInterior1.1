@@ -40,8 +40,9 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ── View toggle buttons ──
-  document.getElementById('btn-render').addEventListener('click', () => setView('render'));
-  document.getElementById('btn-3d').addEventListener('click',     () => setView('3d'));
+  document.getElementById('btn-render').addEventListener('click',    () => setView('render'));
+  document.getElementById('btn-3d').addEventListener('click',        () => setView('3d'));
+  document.getElementById('btn-floorplan').addEventListener('click', () => setView('floorplan'));
 
   // ── Material preset chips ──
   document.querySelectorAll('.preset-btn').forEach(btn => {
@@ -100,13 +101,24 @@ function handleFile(file) {
 function setView(view) {
   const rv = document.getElementById('render-view');
   const mv = document.getElementById('model-viewer');
-  document.getElementById('btn-render').classList.toggle('active', view === 'render');
-  document.getElementById('btn-3d').classList.toggle('active', view === '3d');
+  const fv = document.getElementById('floor-plan-view');
+
+  document.getElementById('btn-render').classList.toggle('active',    view === 'render');
+  document.getElementById('btn-3d').classList.toggle('active',        view === '3d');
+  document.getElementById('btn-floorplan').classList.toggle('active', view === 'floorplan');
+
   rv.style.display = view === 'render' ? 'flex' : 'none';
 
   if (mv) {
     mv.style.display = view === '3d' ? 'block' : 'none';
     if (view === '3d') mv.style.flex = '1';
+  }
+
+  if (fv) {
+    fv.style.display = view === 'floorplan' ? 'flex' : 'none';
+    if (view === 'floorplan') {
+      requestAnimationFrame(() => window.fpViewer?.resize());
+    }
   }
 }
 
