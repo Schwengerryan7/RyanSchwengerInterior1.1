@@ -1,37 +1,40 @@
 # SpatialLM RunPod Serverless Worker
-# Base: PyTorch 2.4.1 + CUDA 12.4
-FROM pytorch/pytorch:2.4.1-cuda12.4-cudnn9-runtime
+# Uses devel image so nvcc is available for Sonata CUDA extension compilation
+FROM pytorch/pytorch:2.4.1-cuda12.4-cudnn9-devel
 
 RUN apt-get update && apt-get install -y \
-    git curl wget \
-    build-essential \
-    libsparsehash-dev \
+    git curl wget build-essential libsparsehash-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 
 # Clone SpatialLM
 RUN git clone https://github.com/manycore-research/SpatialLM.git
+
+# Install all deps with pip — skip torch/torchvision (already in base image)
+RUN pip install --upgrade pip && pip install \
+    "transformers>=4.41.2,<=4.46.1" \
+    "safetensors>=0.4.5" \
+    "pandas>=2.2.3" \
+    "scipy>=1.15.2" \
+    "scikit-learn>=1.6.1" \
+    "einops>=0.8.1" \
+    "huggingface_hub>=0.25.0" \
+    "open3d>=0.18.0" \
+    "shapely>=2.0.7" \
+    "tokenizers>=0.19.0,<0.20.4" \
+    "addict" "toml" "bbox" "terminaltables" \
+    "poethepoet" \
+    "runpod" "plyfile" "requests"
+
+# Make SpatialLM importable without poetry
+ENV PYTHONPATH=/workspace/SpatialLM
+
+# Install Sonata point-cloud backbone (requires nvcc — needs devel image)
 WORKDIR /workspace/SpatialLM
-
-# Install poetry + deps
-RUN pip install --upgrade pip poetry
-RUN poetry config virtualenvs.create false --local
-RUN poetry install --no-dev
-
-# Install Sonata point-cloud backbone (required for SpatialLM 1.1)
-RUN pip install poethepoet && poe install-sonata
-
-# Additional deps for the handler
-RUN pip install runpod plyfile requests
+RUN poe install-sonata
 
 WORKDIR /workspace
-
-# Copy handler
 COPY handler_spatiallm.py .
-
-# Model weights are downloaded at first cold start (avoids CI disk/network limits).
-# To pre-bake them into a custom image, run this manually after building:
-#   docker run --rm <image> python -c "from transformers import AutoModelForCausalLM, AutoTokenizer; AutoTokenizer.from_pretrained('manycore-research/SpatialLM1.1-Qwen-0.5B'); AutoModelForCausalLM.from_pretrained('manycore-research/SpatialLM1.1-Qwen-0.5B', torch_dtype='auto')"
 
 CMD ["python", "-u", "handler_spatiallm.py"]
