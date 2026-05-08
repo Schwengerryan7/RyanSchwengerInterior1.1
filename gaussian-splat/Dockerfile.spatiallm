@@ -30,10 +30,8 @@ WORKDIR /workspace
 # Copy handler
 COPY handler_spatiallm.py .
 
-# Pre-download model weights at build time so cold start is fast
-RUN python -c "\
-from transformers import AutoModelForCausalLM, AutoTokenizer; \
-AutoTokenizer.from_pretrained('manycore-research/SpatialLM1.1-Qwen-0.5B'); \
-AutoModelForCausalLM.from_pretrained('manycore-research/SpatialLM1.1-Qwen-0.5B', torch_dtype='auto')"
+# Model weights are downloaded at first cold start (avoids CI disk/network limits).
+# To pre-bake them into a custom image, run this manually after building:
+#   docker run --rm <image> python -c "from transformers import AutoModelForCausalLM, AutoTokenizer; AutoTokenizer.from_pretrained('manycore-research/SpatialLM1.1-Qwen-0.5B'); AutoModelForCausalLM.from_pretrained('manycore-research/SpatialLM1.1-Qwen-0.5B', torch_dtype='auto')"
 
 CMD ["python", "-u", "handler_spatiallm.py"]
