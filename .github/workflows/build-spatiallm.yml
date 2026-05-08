@@ -1,0 +1,39 @@
+name: Build SpatialLM Docker Image
+
+on:
+  push:
+    paths:
+      - 'gaussian-splat/handler_spatiallm.py'
+      - 'gaussian-splat/Dockerfile.spatiallm'
+    branches: [main]
+  workflow_dispatch:  # allows manual trigger from GitHub UI
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/spatiallm
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./gaussian-splat
+          file: ./gaussian-splat/Dockerfile.spatiallm
+          push: true
+          tags: ghcr.io/${{ env.IMAGE_NAME }}:latest
