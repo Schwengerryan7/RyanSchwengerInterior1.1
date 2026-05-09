@@ -89,6 +89,9 @@
   });                                                                                                                                 
                                                                                                                                     
   app.post('/splat/run', async (req, res) => {
+    if (SPLAT_ENDPOINT_ID === 'YOUR_SPLAT_ENDPOINT_ID') {
+      return res.status(503).json({ error: 'GS endpoint not configured. Set SPLAT_ENDPOINT_ID env var, or drop a .ply file directly into the Floor Plan tab.' });
+    }
     try {
       const { default: fetch } = await import('node-fetch');
       const r = await fetch(`${SPLAT_URL}/run`, {

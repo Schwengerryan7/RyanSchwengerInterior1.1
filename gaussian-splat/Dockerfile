@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
 # torch first so gsplat CUDA extension compiles against the right version
 RUN pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 
-RUN pip3 install runpod pillow numpy pycolmap gsplat
+RUN pip3 install runpod pillow numpy
 
-COPY handler.py /handler.py
-CMD ["python3", "-u", "/handler.py"]
+COPY handler_scan.py /handler_scan.py
+CMD ["python3", "-u", "/handler_scan.py"]

@@ -1,6 +1,6 @@
 const RUNPOD_API_KEY = 'YOUR_NEW_KEY_HERE';
 const ENDPOINT_ID = '4qqf6weor3acy0';
-const API_URL = `https://cautious-journey-69jrr96g77642rpq4-3001.app.github.dev`;
+const API_URL = ''; // relative URLs — works with proxy.js on any host
 
 let currentFile = null;
 let history = [];
@@ -170,6 +170,10 @@ async function triggerRoomScan(videoFile) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ input: { images_base64: frames, iterations: 3000 } }),
     });
+    if (submitRes.status === 503) {
+      const err = await submitRes.json();
+      throw new Error(err.error || 'GS endpoint not configured');
+    }
     if (!submitRes.ok) throw new Error(`GS submit failed: ${submitRes.status}`);
     const { id: jobId } = await submitRes.json();
 
