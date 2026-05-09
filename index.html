@@ -51,6 +51,9 @@
     <div class="floor-plan-view" id="floor-plan-view">
       <div class="fp-toolbar">
         <div class="fp-tools">
+          <button class="fp-tool-btn fp-mode-btn active" id="fp-mode-2d" title="2D plan">2D</button>
+          <button class="fp-tool-btn fp-mode-btn" id="fp-mode-3d" title="3D view">3D</button>
+          <div class="fp-divider"></div>
           <button class="fp-tool-btn" id="fp-fit" title="Fit to view">⊡</button>
           <button class="fp-tool-btn" id="fp-zoom-in" title="Zoom in">+</button>
           <button class="fp-tool-btn" id="fp-zoom-out" title="Zoom out">−</button>
@@ -61,6 +64,7 @@
         </div>
       </div>
       <canvas id="fp-canvas"></canvas>
+      <div id="fp-3d-container"></div>
     </div>
 
     <div class="render-overlay" id="render-overlay">
@@ -81,6 +85,20 @@
 
   <!-- Control Panel -->
   <div class="control-panel">
+
+    <div class="panel-section">
+      <div class="section-label">Room Scan</div>
+      <div class="upload-zone" id="scan-zone">
+        <div class="upload-icon">🎥</div>
+        <div class="upload-text"><strong>Click to upload</strong> or drag & drop<br>.mp4 / .mov video or .ply scan</div>
+      </div>
+      <input type="file" id="scan-input" accept=".mp4,.mov,.avi,.ply" style="display:none">
+      <button class="render-btn" id="scan-btn" style="margin-top:12px;display:none">
+        Scan Room &amp; Generate Floor Plan
+      </button>
+      <div class="scan-status" id="scan-status"></div>
+    </div>
+
     <div class="panel-section">
       <div class="section-label">Model</div>
       <!-- FIX: removed onclick — upload-zone click is wired in script.js -->
