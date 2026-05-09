@@ -1,0 +1,31 @@
+name: Build Gaussian Splat Docker Image
+
+on:
+  push:
+    paths:
+      - 'gaussian-splat/handler.py'
+      - 'gaussian-splat/Dockerfile'
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: schwengerryan7
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./gaussian-splat
+          file: ./gaussian-splat/Dockerfile
+          push: true
+          tags: schwengerryan7/gs-splat:latest
