@@ -24,19 +24,21 @@ def run_colmap(image_dir, workspace):
     sparse = os.path.join(workspace, "sparse")
     os.makedirs(sparse, exist_ok=True)
 
+    env = {**os.environ, "QT_QPA_PLATFORM": "offscreen"}
+
     subprocess.run([
         "colmap", "feature_extractor",
         "--database_path", db,
         "--image_path", image_dir,
         "--ImageReader.single_camera", "1",
         "--SiftExtraction.use_gpu", "1",
-    ], check=True, capture_output=True)
+    ], check=True, capture_output=True, env=env)
 
     subprocess.run([
         "colmap", "exhaustive_matcher",
         "--database_path", db,
         "--SiftMatching.use_gpu", "1",
-    ], check=True, capture_output=True)
+    ], check=True, capture_output=True, env=env)
 
     subprocess.run([
         "colmap", "mapper",
@@ -44,7 +46,7 @@ def run_colmap(image_dir, workspace):
         "--image_path", image_dir,
         "--output_path", sparse,
         "--Mapper.num_threads", "4",
-    ], check=True, capture_output=True)
+    ], check=True, capture_output=True, env=env)
 
     # Convert to text for easy parsing
     recon_dir = os.path.join(sparse, "0")
@@ -53,7 +55,7 @@ def run_colmap(image_dir, workspace):
         "--input_path", recon_dir,
         "--output_path", recon_dir,
         "--output_type", "TXT",
-    ], check=True, capture_output=True)
+    ], check=True, capture_output=True, env=env)
 
     return recon_dir
 
