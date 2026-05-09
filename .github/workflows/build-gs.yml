@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'gaussian-splat/handler.py'
+      - 'gaussian-splat/handler_scan.py'
       - 'gaussian-splat/Dockerfile'
     branches: [main]
   workflow_dispatch:
