@@ -4,7 +4,7 @@
                                                                                                                                       
   const ENDPOINT_ID       = '4qqf6weor3acy0';
   const RECON_ENDPOINT_ID = 'obyg27dl14g8ws';
-  const SPLAT_ENDPOINT_ID = process.env.SPLAT_ENDPOINT_ID || 'YOUR_SPLAT_ENDPOINT_ID';
+  const SPLAT_ENDPOINT_ID = process.env.SPLAT_ENDPOINT_ID || 'l4cc89v4me7yg4';
   const FP_ENDPOINT_ID    = process.env.FP_ENDPOINT_ID    || 'cliyu9anwshcle';
   const RUNPOD_API_KEY    = process.env.RUNPOD_API_KEY;
   const BASE_URL          = `https://api.runpod.ai/v2/${ENDPOINT_ID}`;
