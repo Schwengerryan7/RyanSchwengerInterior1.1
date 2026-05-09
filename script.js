@@ -164,25 +164,25 @@ async function triggerRoomScan(videoFile) {
     const frames = await extractVideoFrames(videoFile, 40);
     setScanStatus(`Extracted ${frames.length} frames — submitting to GPU…`);
 
-    // Submit Gaussian Splatting job
+    // Submit COLMAP scan job
     const submitRes = await fetch(`${API_URL}/splat/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input: { images_base64: frames, iterations: 3000 } }),
+      body: JSON.stringify({ input: { images_base64: frames } }),
     });
     if (submitRes.status === 503) {
       const err = await submitRes.json();
-      throw new Error(err.error || 'GS endpoint not configured');
+      throw new Error(err.error || 'Scan endpoint not configured');
     }
-    if (!submitRes.ok) throw new Error(`GS submit failed: ${submitRes.status}`);
+    if (!submitRes.ok) throw new Error(`Scan submit failed: ${submitRes.status}`);
     const { id: jobId } = await submitRes.json();
 
-    // Poll GS job
+    // Poll scan job
     const start = Date.now();
     while (true) {
       await new Promise(r => setTimeout(r, 5000));
       const elapsed = Math.round((Date.now() - start) / 1000);
-      setScanStatus(`Gaussian Splatting… ${elapsed}s`);
+      setScanStatus(`Building point cloud… ${elapsed}s`);
 
       const statusRes = await fetch(`${API_URL}/splat/status/${jobId}`);
       const status = await statusRes.json();
@@ -190,7 +190,7 @@ async function triggerRoomScan(videoFile) {
       if (status.status === 'COMPLETED') {
         setScanStatus('Scan complete — generating floor plan…');
         const plyBlob = new Blob(
-          [Uint8Array.from(atob(status.output.splat_base64), c => c.charCodeAt(0))],
+          [Uint8Array.from(atob(status.output.ply_base64), c => c.charCodeAt(0))],
           { type: 'application/octet-stream' }
         );
         const plyFile = new File([plyBlob], 'scan.ply');
