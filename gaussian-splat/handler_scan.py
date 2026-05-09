@@ -31,13 +31,13 @@ def run_colmap(image_dir, workspace):
         "--database_path", db,
         "--image_path", image_dir,
         "--ImageReader.single_camera", "1",
-        "--SiftExtraction.use_gpu", "1",
+        "--SiftExtraction.use_gpu", "0",
     ], check=True, capture_output=True, env=env)
 
     subprocess.run([
         "colmap", "exhaustive_matcher",
         "--database_path", db,
-        "--SiftMatching.use_gpu", "1",
+        "--SiftMatching.use_gpu", "0",
     ], check=True, capture_output=True, env=env)
 
     subprocess.run([
