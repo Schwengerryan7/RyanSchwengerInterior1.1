@@ -48,8 +48,18 @@ def run_colmap(image_dir, workspace):
         "--Mapper.num_threads", "4",
     ], check=True, capture_output=True, env=env)
 
-    # Convert to text for easy parsing
-    recon_dir = os.path.join(sparse, "0")
+    # Pick the largest reconstruction (most images registered)
+    recon_dirs = sorted([
+        d for d in os.listdir(sparse)
+        if os.path.isdir(os.path.join(sparse, d)) and d.isdigit()
+    ], key=int)
+    if not recon_dirs:
+        raise subprocess.CalledProcessError(
+            1, "colmap mapper",
+            stderr=b"Mapper produced no reconstruction — video may move too fast or lack texture. Try a slower walkthrough."
+        )
+    recon_dir = os.path.join(sparse, recon_dirs[0])
+
     subprocess.run([
         "colmap", "model_converter",
         "--input_path", recon_dir,
