@@ -46,22 +46,19 @@ REPO_DIR = "/workspace/SpatialLM"
 MODEL_ID  = "manycore-research/SpatialLM1.1-Qwen-0.5B"
 
 
-def init():
+def _ensure_model():
     global _model, _tokenizer
-    try:
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-        print("[SpatialLM] Loading model…")
-        _tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-        _model = AutoModelForCausalLM.from_pretrained(
-            MODEL_ID,
-            device_map="cuda",
-            torch_dtype="auto",
-        )
-        print("[SpatialLM] Model ready.")
-    except Exception as e:
-        print(f"[SpatialLM] FATAL in init(): {e}", file=sys.stderr)
-        import traceback; traceback.print_exc()
-        sys.exit(1)
+    if _model is not None:
+        return
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    print("[SpatialLM] Loading model…")
+    _tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+    _model = AutoModelForCausalLM.from_pretrained(
+        MODEL_ID,
+        device_map="cuda",
+        torch_dtype="auto",
+    )
+    print("[SpatialLM] Model ready.")
 
 
 # ── PLY helpers ───────────────────────────────────────────────────────────────
@@ -257,6 +254,7 @@ def handler(job):
             return {"error": "Provide ply_base64 or ply_url"}
 
     try:
+        _ensure_model()
         print("[SpatialLM] Loading PLY…")
         pcd = _load_ply_path(ply_path)
         print(f"[SpatialLM] {len(pcd.points):,} raw points")
@@ -276,4 +274,4 @@ def handler(job):
         os.remove(ply_path)
 
 
-runpod.serverless.start({"handler": handler, "init": init})
+runpod.serverless.start({"handler": handler})
