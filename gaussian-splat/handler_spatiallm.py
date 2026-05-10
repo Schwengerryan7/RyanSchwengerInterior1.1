@@ -148,8 +148,8 @@ def _orient_z_up(pcd: o3d.geometry.PointCloud) -> o3d.geometry.PointCloud:
 def _run_spatiallm(pcd: o3d.geometry.PointCloud) -> dict:
     import sys
     sys.path.insert(0, REPO_DIR)
-    from inference import generate_layout
-    from spatiallm.data import preprocess_point_cloud, Layout
+    from inference import generate_layout, preprocess_point_cloud
+    from spatiallm import Layout
     import spatiallm
 
     template = os.path.join(os.path.dirname(spatiallm.__file__), "code_template.txt")
