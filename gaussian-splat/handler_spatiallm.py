@@ -16,14 +16,27 @@ Output: { walls, doors, windows, objects, bounds }
 
 import runpod
 import os
+import sys
 import math
 import base64
 import tempfile
 import json
 import requests
 import numpy as np
-import open3d as o3d
-from plyfile import PlyData
+
+try:
+    import open3d as o3d
+    print("[SpatialLM] open3d imported OK")
+except Exception as e:
+    print(f"[SpatialLM] FATAL: open3d import failed: {e}", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    from plyfile import PlyData
+    print("[SpatialLM] plyfile imported OK")
+except Exception as e:
+    print(f"[SpatialLM] FATAL: plyfile import failed: {e}", file=sys.stderr)
+    sys.exit(1)
 
 # ── Model (loaded once at cold start) ────────────────────────────────────────
 _model = None
@@ -35,16 +48,20 @@ MODEL_ID  = "manycore-research/SpatialLM1.1-Qwen-0.5B"
 
 def init():
     global _model, _tokenizer
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-
-    print("[SpatialLM] Loading model…")
-    _tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-    _model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID,
-        device_map="cuda",
-        torch_dtype="auto",
-    )
-    print("[SpatialLM] Model ready.")
+    try:
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        print("[SpatialLM] Loading model…")
+        _tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+        _model = AutoModelForCausalLM.from_pretrained(
+            MODEL_ID,
+            device_map="cuda",
+            torch_dtype="auto",
+        )
+        print("[SpatialLM] Model ready.")
+    except Exception as e:
+        print(f"[SpatialLM] FATAL in init(): {e}", file=sys.stderr)
+        import traceback; traceback.print_exc()
+        sys.exit(1)
 
 
 # ── PLY helpers ───────────────────────────────────────────────────────────────
