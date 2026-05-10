@@ -583,8 +583,8 @@
   }
 
   // ─── Three.js 3D renderer ─────────────────────────────────────────────────────
-  const THREE_CDN  = 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js';
-  const ORBIT_CDN  = 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/controls/OrbitControls.js';
+  const THREE_CDN  = 'https://cdn.jsdelivr.net/npm/three@0.132.0/build/three.min.js';
+  const ORBIT_CDN  = 'https://cdn.jsdelivr.net/npm/three@0.132.0/examples/js/controls/OrbitControls.js';
 
   function loadScript(src, cb) {
     if (document.querySelector(`script[src="${src}"]`)) { cb(); return; }
@@ -616,7 +616,7 @@
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(w, h);
     renderer.shadowMap.enabled = true;
-    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.outputEncoding = THREE.sRGBEncoding || 3001;
     renderer.setClearColor(0x1a1916);
     container.appendChild(renderer.domElement);
 
