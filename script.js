@@ -161,7 +161,7 @@ async function triggerRoomScan(videoFile) {
 
   try {
     setScanStatus('Extracting frames from video…');
-    const frames = await extractVideoFrames(videoFile, 80);
+    const frames = await extractVideoFrames(videoFile, 40);
     setScanStatus(`Extracted ${frames.length} frames — submitting to GPU…`);
 
     // Submit COLMAP scan job

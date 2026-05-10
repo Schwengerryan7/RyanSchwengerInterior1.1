@@ -35,9 +35,10 @@ def run_colmap(image_dir, workspace):
     ], check=True, capture_output=True, env=env)
 
     subprocess.run([
-        "colmap", "exhaustive_matcher",
+        "colmap", "sequential_matcher",
         "--database_path", db,
         "--SiftMatching.use_gpu", "0",
+        "--SequentialMatching.overlap", "10",
     ], check=True, capture_output=True, env=env)
 
     subprocess.run([
