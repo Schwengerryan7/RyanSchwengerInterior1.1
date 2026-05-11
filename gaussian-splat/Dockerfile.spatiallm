@@ -1,5 +1,3 @@
-# SpatialLM RunPod Serverless Worker
-# Uses devel image so nvcc is available for Sonata CUDA extension compilation
 FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 
 RUN apt-get update && apt-get install -y \
@@ -9,29 +7,28 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /workspace
 
-# Clone SpatialLM
 RUN git clone https://github.com/manycore-research/SpatialLM.git
 
-# Install all deps with pip — skip torch/torchvision (already in base image)
+# Pin transformers to <=4.46.1 — 5.x breaks torch 2.4.1 compatibility
 RUN pip install --upgrade pip && pip install \
-    "transformers>=4.41.2,<=4.46.1" \
-    "safetensors>=0.4.5" \
-    "pandas>=2.2.3" \
-    "scipy>=1.15.2" \
-    "scikit-learn>=1.6.1" \
-    "einops>=0.8.1" \
-    "huggingface_hub>=0.25.0" \
-    "open3d>=0.18.0" \
-    "shapely>=2.0.7" \
+    "transformers==4.46.1" \
     "tokenizers>=0.19.0,<0.20.4" \
+    "safetensors>=0.4.5" \
+    "huggingface_hub==0.36.2" \
+    "einops==0.8.2" \
+    "open3d==0.19.0" \
+    "plyfile==1.1.3" \
+    "numpy==1.26.4" \
+    "scipy==1.17.1" \
+    "scikit-learn==1.8.0" \
+    "shapely==2.1.2" \
+    "pandas>=2.2.3" \
     "addict" "toml" "bbox" "terminaltables" \
     "poethepoet" \
-    "runpod" "plyfile" "requests"
+    "runpod==1.9.0" "requests"
 
-# Make SpatialLM importable without poetry
 ENV PYTHONPATH=/workspace/SpatialLM
 
-# Install Sonata point-cloud backbone (requires nvcc — needs devel image)
 WORKDIR /workspace/SpatialLM
 RUN poe install-sonata
 
