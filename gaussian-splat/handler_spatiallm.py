@@ -50,8 +50,11 @@ def _ensure_model():
     global _model, _tokenizer
     if _model is not None:
         return
+    import sys
+    sys.path.insert(0, REPO_DIR)
+    import spatiallm  # registers spatiallm_qwen architecture with AutoConfig
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    print("[SpatialLM] Loading model…")
+    print("[SpatialLM] Loading model...")
     _tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
     _model = AutoModelForCausalLM.from_pretrained(
         MODEL_ID,
@@ -149,7 +152,7 @@ def _run_spatiallm(pcd: o3d.geometry.PointCloud) -> dict:
     from spatiallm import Layout
     import spatiallm
 
-    template = os.path.join(os.path.dirname(spatiallm.__file__), "code_template.txt")
+    template = os.path.join(os.path.dirname(os.path.dirname(spatiallm.__file__)), "code_template.txt")
 
     pts  = np.asarray(pcd.points,  dtype=np.float32)
     cols = np.asarray(pcd.colors,  dtype=np.float32)
@@ -170,11 +173,8 @@ def _run_spatiallm(pcd: o3d.geometry.PointCloud) -> dict:
         top_k=10, top_p=0.95, temperature=0.6, num_beams=1,
     )
 
-    layout_str = layout.to_language_string()
-    print("[SpatialLM] raw output:", layout_str[:300])
-
-    parsed = Layout.from_language_string(layout_str)
-    return _layout_to_dict(parsed)
+    print("[SpatialLM] inference complete")
+    return _layout_to_dict(layout)
 
 
 def _layout_to_dict(layout) -> dict:
@@ -184,8 +184,8 @@ def _layout_to_dict(layout) -> dict:
 
     for i, w in enumerate(layout.walls):
         wid  = f"wall_{i}"
-        sx, sy = float(w.a[0]), float(w.a[1])
-        ex, ey = float(w.b[0]), float(w.b[1])
+        sx, sy = float(w.ax), float(w.ay)
+        ex, ey = float(w.bx), float(w.by)
         walls.append({
             "id":     wid,
             "start":  [sx, sy],
@@ -197,10 +197,9 @@ def _layout_to_dict(layout) -> dict:
     doors = []
     for d in layout.doors:
         wdir = wall_dirs.get(d.wall_id, 0.0)
-        # Door leaf swings perpendicular into the room
         door_dir = wdir + math.pi / 2
         doors.append({
-            "position": [float(d.position[0]), float(d.position[1])],
+            "position": [float(d.position_x), float(d.position_y)],
             "width":    float(d.width),
             "wall_dir": door_dir,
         })
@@ -208,17 +207,17 @@ def _layout_to_dict(layout) -> dict:
     windows = []
     for win in layout.windows:
         windows.append({
-            "position": [float(win.position[0]), float(win.position[1])],
+            "position": [float(win.position_x), float(win.position_y)],
             "width":    float(win.width),
         })
 
     objects = []
     for bbox in layout.bboxes:
         objects.append({
-            "class":    bbox.semantic,
-            "center":   [float(bbox.center[0]), float(bbox.center[1])],
+            "class":    bbox.class_name,
+            "center":   [float(bbox.position_x), float(bbox.position_y)],
             "rotation": float(bbox.angle_z),
-            "scale":    [float(bbox.scale[0]), float(bbox.scale[1])],
+            "scale":    [float(bbox.scale_x), float(bbox.scale_y)],
         })
 
     # 2-D bounding box over all wall endpoints

@@ -38,7 +38,7 @@ def run_colmap(image_dir, workspace):
         "colmap", "sequential_matcher",
         "--database_path", db,
         "--SiftMatching.use_gpu", "0",
-        "--SequentialMatching.overlap", "10",
+        "--SequentialMatching.overlap", "15",
     ], check=True, capture_output=True, env=env)
 
     subprocess.run([
@@ -57,7 +57,7 @@ def run_colmap(image_dir, workspace):
     if not recon_dirs:
         raise subprocess.CalledProcessError(
             1, "colmap mapper",
-            stderr=b"Mapper produced no reconstruction — video may move too fast or lack texture. Try a slower walkthrough."
+            stderr=b"Mapper produced no reconstruction - video may move too fast or lack texture. Try a slower walkthrough."
         )
     recon_dir = os.path.join(sparse, recon_dirs[0])
 

@@ -24,7 +24,7 @@ RUN pip install --upgrade pip && pip install \
     "shapely==2.1.2" \
     "pandas>=2.2.3" \
     "addict" "toml" "bbox" "terminaltables" \
-    "poethepoet" \
+    "poethepoet" "accelerate" \
     "runpod==1.9.0" "requests"
 
 ENV PYTHONPATH=/workspace/SpatialLM
