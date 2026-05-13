@@ -52,7 +52,8 @@ def _ensure_model():
         return
     import sys
     sys.path.insert(0, REPO_DIR)
-    import spatiallm  # registers spatiallm_qwen architecture with AutoConfig
+    import spatiallm
+    import spatiallm.model  # triggers AutoConfig.register("spatiallm_qwen", ...)
     from transformers import AutoModelForCausalLM, AutoTokenizer
     print("[SpatialLM] Loading model...")
     _tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
