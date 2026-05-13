@@ -161,7 +161,7 @@ async function triggerRoomScan(videoFile) {
 
   try {
     setScanStatus('Extracting frames from video…');
-    const frames = await extractVideoFrames(videoFile, 40);
+    const frames = await extractVideoFrames(videoFile, 60);
     setScanStatus(`Extracted ${frames.length} frames — submitting to GPU…`);
 
     // Submit COLMAP scan job
@@ -217,7 +217,7 @@ function extractVideoFrames(videoFile, maxFrames) {
   return new Promise((resolve, reject) => {
     const video  = document.createElement('video');
     const canvas = document.createElement('canvas');
-    canvas.width = 640; canvas.height = 480;
+    canvas.width = 960; canvas.height = 720;
     const ctx = canvas.getContext('2d');
     const frames = [];
     let i = 0;
@@ -230,7 +230,7 @@ function extractVideoFrames(videoFile, maxFrames) {
       const interval = video.duration / maxFrames;
 
       video.onseeked = () => {
-        ctx.drawImage(video, 0, 0, 640, 480);
+        ctx.drawImage(video, 0, 0, 960, 720);
         frames.push(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
         i++;
         if (i < maxFrames) {
