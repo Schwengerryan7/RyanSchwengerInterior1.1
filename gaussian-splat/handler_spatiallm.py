@@ -19,7 +19,7 @@ _model = None
 _tokenizer = None
 
 REPO_DIR = "/workspace/SpatialLM"
-MODEL_ID  = "manycore-research/SpatialLM1.1-Qwen-7B"
+MODEL_ID  = "manycore-research/SpatialLM1.1-Llama-1B"
 
 
 def _ensure_model():
