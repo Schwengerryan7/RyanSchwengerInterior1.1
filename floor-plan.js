@@ -605,6 +605,61 @@
     }
   }
 
+  // Object type → { height(m), color, label }
+  const OBJ_TYPES = {
+    sofa:       { h: 0.85, color: 0x8b7355 }, couch:      { h: 0.85, color: 0x8b7355 },
+    chair:      { h: 0.90, color: 0xa0785a }, armchair:   { h: 0.90, color: 0xa0785a },
+    bed:        { h: 0.55, color: 0x9b8ea0 }, desk:       { h: 0.76, color: 0xc4a882 },
+    table:      { h: 0.76, color: 0xc4a882 }, dining:     { h: 0.76, color: 0xc4a882 },
+    cabinet:    { h: 1.20, color: 0xb0a090 }, wardrobe:   { h: 1.80, color: 0xa89880 },
+    shelf:      { h: 1.60, color: 0xb8a888 }, bookcase:   { h: 1.60, color: 0xb8a888 },
+    toilet:     { h: 0.40, color: 0xe8e8e8 }, bathtub:    { h: 0.55, color: 0xd0d8e0 },
+    sink:       { h: 0.85, color: 0xd8dce0 }, shower:     { h: 0.10, color: 0xc8d8e8 },
+    tv:         { h: 1.10, color: 0x303030 }, television: { h: 1.10, color: 0x303030 },
+    refrigerator:{h:1.70, color: 0xd0d0d0 }, fridge:     { h: 1.70, color: 0xd0d0d0 },
+  };
+
+  function makeFloorTexture(THREE) {
+    const size = 512;
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#e8e0d0';
+    ctx.fillRect(0, 0, size, size);
+    const plankW = size / 4, plankH = size / 12;
+    ctx.fillStyle = '#d4c8b0';
+    for (let row = 0; row < size / plankH; row++) {
+      const offset = (row % 2) * (plankW / 2);
+      for (let col = -1; col < size / plankW + 1; col++) {
+        const x = col * plankW + offset, y = row * plankH;
+        ctx.strokeStyle = '#c8bc9e';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(x + 1, y + 1, plankW - 2, plankH - 2);
+        ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.03})`;
+        ctx.fillRect(x + 1, y + 1, plankW - 2, plankH - 2);
+      }
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    return tex;
+  }
+
+  function makeWallTexture(THREE) {
+    const size = 256;
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#f4f0e8';
+    ctx.fillRect(0, 0, size, size);
+    for (let i = 0; i < 400; i++) {
+      ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.015})`;
+      ctx.fillRect(Math.random() * size, Math.random() * size, Math.random() * 6 + 1, Math.random() * 6 + 1);
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    return tex;
+  }
+
   function build3D(container) {
     destroy3D();
     if (!window.THREE) return;
@@ -612,41 +667,56 @@
     const w = container.clientWidth  || 800;
     const h = container.clientHeight || 600;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(w, h);
     renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputEncoding = THREE.sRGBEncoding || 3001;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
     renderer.setClearColor(0x1a1916);
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a1916);
-    scene.fog = new THREE.Fog(0x1a1916, 20, 50);
+    scene.background = new THREE.Color(0x2a2825);
+    scene.fog = new THREE.FogExp2(0x2a2825, 0.06);
 
-    const camera = new THREE.PerspectiveCamera(50, w / h, 0.01, 100);
+    const camera = new THREE.PerspectiveCamera(55, w / h, 0.01, 100);
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.07;
-    controls.minPolarAngle = 0;
-    controls.maxPolarAngle = Math.PI / 2;
+    controls.dampingFactor = 0.08;
+    controls.minPolarAngle = 0.1;
+    controls.maxPolarAngle = Math.PI / 2.1;
+    controls.minDistance = 1;
+    controls.maxDistance = 30;
 
     // Lighting
-    scene.add(new THREE.AmbientLight(0xfff8f0, 0.7));
-    const sun = new THREE.DirectionalLight(0xfff5e0, 1.8);
-    sun.position.set(5, 10, 5);
+    scene.add(new THREE.AmbientLight(0xfff5e8, 0.5));
+    const hemi = new THREE.HemisphereLight(0xfff8f0, 0x8090a0, 0.4);
+    scene.add(hemi);
+    const sun = new THREE.DirectionalLight(0xfff8f0, 1.5);
+    sun.position.set(8, 12, 6);
     sun.castShadow = true;
+    sun.shadow.mapSize.width = 2048;
+    sun.shadow.mapSize.height = 2048;
+    sun.shadow.camera.near = 0.1;
+    sun.shadow.camera.far = 50;
+    sun.shadow.camera.left = -15;
+    sun.shadow.camera.right = 15;
+    sun.shadow.camera.top = 15;
+    sun.shadow.camera.bottom = -15;
+    sun.shadow.bias = -0.001;
     scene.add(sun);
-    const fill = new THREE.DirectionalLight(0xc8d8ff, 0.4);
-    fill.position.set(-4, 3, -4);
+    const fill = new THREE.DirectionalLight(0xc8d8ff, 0.3);
+    fill.position.set(-6, 4, -4);
     scene.add(fill);
 
     if (plan) {
-      populateScene(scene, plan, camera, controls);
+      populateScene(scene, plan, camera, controls, THREE);
     } else {
-      // Placeholder grid
-      scene.add(new THREE.GridHelper(10, 10, 0x444440, 0x333330));
-      camera.position.set(0, 6, 6);
+      scene.add(new THREE.GridHelper(10, 20, 0x444440, 0x2a2825));
+      camera.position.set(0, 6, 8);
       controls.target.set(0, 0, 0);
     }
     controls.update();
@@ -659,7 +729,6 @@
     }
     animate();
 
-    // Resize handler
     function onResize() {
       const cw = container.clientWidth, ch = container.clientHeight;
       if (!cw || !ch) return;
@@ -672,28 +741,31 @@
     three = { renderer, scene, camera, controls, animId, onResize };
   }
 
-  function populateScene(scene, p, camera, controls) {
-    const THREE = window.THREE;
-    const S = p.scale || 100; // cm per meter
-    const WALL_H   = 2.5;     // default wall height in meters
-    const WALL_T   = 0.08;    // wall thickness in meters
+  function populateScene(scene, p, camera, controls, THREE) {
+    if (!THREE) THREE = window.THREE;
+    const S      = p.scale || 100;
+    const WALL_H = 2.6;
+    const WALL_T = 0.12;
     const W = p.width  / S;
     const H = p.height / S;
     const cx = W / 2, cz = H / 2;
 
-    // Materials
-    const wallMat  = new THREE.MeshLambertMaterial({ color: 0xf5f0e8 });
-    const floorMat = new THREE.MeshLambertMaterial({ color: 0xe8e4dc });
-    const ceilMat  = new THREE.MeshLambertMaterial({ color: 0xfafaf8, transparent: true, opacity: 0.6 });
+    const floorTex = makeFloorTexture(THREE);
+    floorTex.repeat.set(W * 0.8, H * 0.8);
+    const wallTex  = makeWallTexture(THREE);
+
+    const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.85, metalness: 0.0 });
+    const wallMat  = new THREE.MeshStandardMaterial({ map: wallTex,  roughness: 0.9,  metalness: 0.0, color: 0xf0ece4 });
+    const ceilMat  = new THREE.MeshStandardMaterial({ color: 0xfafaf8, roughness: 1.0 });
 
     // Floor
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(W * 1.1, H * 1.1), floorMat);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(W + 0.5, H + 0.5), floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(cx, 0, -cz);
     floor.receiveShadow = true;
     scene.add(floor);
 
-    // Ceiling
+    // Ceiling (semi-transparent)
     const ceil = new THREE.Mesh(new THREE.PlaneGeometry(W, H), ceilMat);
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(cx, WALL_H, -cz);
@@ -705,59 +777,77 @@
       const [x2, y2] = wall[1];
       const dx = (x2 - x1) / S, dz = (y2 - y1) / S;
       const len = Math.sqrt(dx * dx + dz * dz);
-      if (len < 0.01) return;
-
-      const wallHeight = WALL_H;
-      const geo  = new THREE.BoxGeometry(len, wallHeight, WALL_T);
+      if (len < 0.05) return;
+      const geo  = new THREE.BoxGeometry(len, WALL_H, WALL_T);
       const mesh = new THREE.Mesh(geo, wallMat);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      mesh.position.set(
-        (x1 + x2) / (2 * S),
-        wallHeight / 2,
-        -(y1 + y2) / (2 * S)
-      );
+      mesh.position.set((x1 + x2) / (2 * S), WALL_H / 2, -(y1 + y2) / (2 * S));
       mesh.rotation.y = -Math.atan2(dz, dx);
       scene.add(mesh);
     });
 
-    // Furniture / objects
-    const objColors = [0xc8b99a, 0xa8c4b8, 0xb8a8c4, 0xc4b8a8, 0xa8b8c4];
-    (p.objects || []).forEach((o, i) => {
+    // Objects / furniture
+    (p.objects || []).forEach(o => {
+      const label = (o.label || '').toLowerCase();
+      const key   = Object.keys(OBJ_TYPES).find(k => label.includes(k));
+      const type  = OBJ_TYPES[key] || { h: 0.5, color: 0xc8b99a };
       const [ox, oy] = o.center;
-      const [sw, sd] = o.scale || [60, 60];
-      const sh = 80; // default furniture height (cm)
-      const geo = new THREE.BoxGeometry(sw / S, sh / S, sd / S);
-      const mat = new THREE.MeshLambertMaterial({ color: objColors[i % objColors.length] });
+      const [sw, sd] = o.scale ? [Math.max(o.scale[0]/S, 0.2), Math.max(o.scale[1]/S, 0.2)] : [0.6, 0.6];
+      const sh = type.h;
+
+      const mat  = new THREE.MeshStandardMaterial({ color: type.color, roughness: 0.8, metalness: 0.05 });
+      const geo  = new THREE.BoxGeometry(sw, sh, sd);
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(ox / S, (sh / S) / 2, -oy / S);
+      mesh.position.set(ox / S, sh / 2, -oy / S);
       mesh.rotation.y = -(o.rot || 0);
       mesh.castShadow = true;
+      mesh.receiveShadow = true;
       scene.add(mesh);
+
+      // Label sprite
+      const sprite = makeLabel(THREE, o.label || key || 'object');
+      sprite.position.set(ox / S, sh + 0.25, -oy / S);
+      scene.add(sprite);
     });
 
-    // Room color fills (flat quads on floor for demo)
-    const roomColors = [0xfff4e8, 0xeef8ee, 0xeeeeff, 0xeeeeff, 0xe8f8f4, 0xf0eeea];
-    (p.rooms || []).forEach((r, i) => {
-      const shape = new THREE.Shape();
-      const pts = r.poly.map(pt => [pt[0] / S, pt[1] / S]);
-      shape.moveTo(pts[0][0], -pts[0][1]);
-      pts.slice(1).forEach(pt => shape.lineTo(pt[0], -pt[1]));
-      shape.closePath();
-      const geo = new THREE.ShapeGeometry(shape);
-      const mat = new THREE.MeshLambertMaterial({
-        color: parseInt(r.color?.replace('#', '0x') || roomColors[i % roomColors.length]),
-        transparent: true, opacity: 0.6, side: THREE.DoubleSide
-      });
+    // Door arcs
+    (p.doors || []).forEach(d => {
+      const geo = new THREE.BoxGeometry(d.len / S || 0.9, WALL_H * 0.9, 0.04);
+      const mat = new THREE.MeshStandardMaterial({ color: 0xc8a878, roughness: 0.6 });
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.rotation.x = -Math.PI / 2;
-      mesh.position.y = 0.01; // just above floor
+      const [hx, hy] = d.hinge;
+      mesh.position.set(hx / S, WALL_H * 0.45, -hy / S);
+      mesh.rotation.y = -(d.dir || 0);
       scene.add(mesh);
     });
 
-    // Camera: isometric overview
-    camera.position.set(cx, Math.max(W, H) * 0.9, H * 0.6);
-    controls.target.set(cx, 0, -cz);
+    // Point light inside room
+    const roomLight = new THREE.PointLight(0xfff5e0, 0.8, Math.max(W, H) * 2);
+    roomLight.position.set(cx, WALL_H - 0.3, -cz);
+    scene.add(roomLight);
+
+    camera.position.set(cx, Math.max(W, H) * 0.85, cz * 1.4);
+    controls.target.set(cx, 0.8, -cz);
+  }
+
+  function makeLabel(THREE, text) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.roundRect ? ctx.roundRect(4, 4, 248, 56, 8) : ctx.fillRect(4, 4, 248, 56);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 28px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 128, 32);
+    const tex = new THREE.CanvasTexture(canvas);
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(0.9, 0.22, 1);
+    return sprite;
   }
 
   function destroy3D() {
