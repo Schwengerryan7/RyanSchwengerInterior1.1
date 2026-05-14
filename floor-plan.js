@@ -283,6 +283,7 @@
   // ─── SpatialLM JSON → floor plan format ─────────────────────────────────────
   // SpatialLM returns coordinates in meters; convert to cm (scale=100)
   function spatialLMToFloorPlan(data) {
+    console.log('[FP] SpatialLM raw output:', JSON.stringify(data).slice(0, 500));
     const b   = data.bounds;
     const S   = 100;        // cm per meter
     const pad = 60;         // cm padding
