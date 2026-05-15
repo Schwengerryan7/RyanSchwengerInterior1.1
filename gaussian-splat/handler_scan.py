@@ -70,8 +70,28 @@ def run_colmap_sparse(image_dir, workspace):
     return recon_dir
 
 
+def _subsample_image_dir(image_dir, workspace, max_frames=20):
+    """Copy at most max_frames evenly-spaced images into a new dir for MVS."""
+    import shutil
+    imgs = sorted(os.listdir(image_dir))
+    if len(imgs) <= max_frames:
+        return image_dir
+    step = len(imgs) / max_frames
+    chosen = [imgs[int(i * step)] for i in range(max_frames)]
+    mvs_dir = os.path.join(workspace, "mvs_images")
+    os.makedirs(mvs_dir, exist_ok=True)
+    for name in chosen:
+        shutil.copy(os.path.join(image_dir, name), os.path.join(mvs_dir, name))
+    return mvs_dir
+
+
 def run_colmap_dense(image_dir, workspace, sparse_dir):
-    """COLMAP MVS: undistort → patch_match_stereo (GPU) → stereo_fusion → dense PLY."""
+    """COLMAP MVS: undistort → patch_match_stereo → stereo_fusion → dense PLY.
+
+    Uses xvfb-run for headless OpenGL, 20 frames at 500px, no geom_consistency
+    to stay within memory and time limits on a RunPod serverless worker.
+    """
+    mvs_image_dir = _subsample_image_dir(image_dir, workspace, max_frames=20)
     dense_dir = os.path.join(workspace, "dense")
     os.makedirs(dense_dir, exist_ok=True)
     env = {**os.environ, "QT_QPA_PLATFORM": "offscreen"}
@@ -79,24 +99,25 @@ def run_colmap_dense(image_dir, workspace, sparse_dir):
     print("[scan] MVS 1/3: image undistortion…")
     subprocess.run([
         "colmap", "image_undistorter",
-        "--image_path", image_dir,
+        "--image_path", mvs_image_dir,
         "--input_path", sparse_dir,
         "--output_path", dense_dir,
         "--output_type", "COLMAP",
-        "--max_image_size", "800",
-    ], check=True, capture_output=True, env=env, timeout=180)
+        "--max_image_size", "500",
+    ], check=True, capture_output=True, env=env, timeout=120)
 
     print("[scan] MVS 2/3: patch match stereo…")
     subprocess.run([
+        "xvfb-run", "-a",
         "colmap", "patch_match_stereo",
         "--workspace_path", dense_dir,
         "--workspace_format", "COLMAP",
-        "--PatchMatchStereo.max_image_size", "800",
-        "--PatchMatchStereo.geom_consistency", "true",
+        "--PatchMatchStereo.max_image_size", "500",
+        "--PatchMatchStereo.geom_consistency", "false",
         "--PatchMatchStereo.gpu_index", "0",
         "--PatchMatchStereo.depth_min", "0.01",
         "--PatchMatchStereo.depth_max", "20",
-    ], check=True, capture_output=True, env=env, timeout=600)
+    ], check=True, capture_output=True, env=env, timeout=300)
 
     print("[scan] MVS 3/3: stereo fusion…")
     fused_path = os.path.join(dense_dir, "fused.ply")
@@ -104,11 +125,11 @@ def run_colmap_dense(image_dir, workspace, sparse_dir):
         "colmap", "stereo_fusion",
         "--workspace_path", dense_dir,
         "--workspace_format", "COLMAP",
-        "--input_type", "geometric",
+        "--input_type", "photometric",
         "--output_path", fused_path,
         "--StereoFusion.max_reproj_error", "2",
         "--StereoFusion.min_num_pixels", "3",
-    ], check=True, capture_output=True, env=env, timeout=300)
+    ], check=True, capture_output=True, env=env, timeout=180)
 
     return fused_path
 
