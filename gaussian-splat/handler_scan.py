@@ -1,19 +1,16 @@
 """
-handler_scan.py — RunPod Serverless — Video → Dense Point Cloud
-===============================================================
+handler_scan.py — RunPod Serverless — Video → Point Cloud
+==========================================================
 Pipeline:
   1. Decode input frames (base64 JPEG array from browser)
-  2. Run COLMAP SfM → sparse reconstruction (camera poses)
-  3. Run COLMAP MVS → dense depth maps → fused point cloud (50k-300k pts)
-  4. Return PLY (base64) → SpatialLM floor plan endpoint
-
-Falls back to sparse SfM if MVS fails (e.g. GPU unavailable).
+  2. Run COLMAP SfM → sparse colored 3D point cloud
+  3. Return PLY (base64) → SpatialLM floor plan endpoint
 
 Input:  { images_base64: [str, ...] }
-Output: { ply_base64: str, point_count: int, dense: bool }
+Output: { ply_base64: str, point_count: int }
 """
 
-import runpod, base64, os, io, tempfile, subprocess, signal
+import runpod, base64, os, io, tempfile, subprocess
 import numpy as np
 from PIL import Image
 import struct
@@ -33,7 +30,7 @@ def run_cmd(cmd, timeout, env):
         raise subprocess.CalledProcessError(-1, cmd, b'', b'timeout')
 
 
-def run_colmap_sparse(image_dir, workspace):
+def run_colmap(image_dir, workspace):
     db     = os.path.join(workspace, "db.db")
     sparse = os.path.join(workspace, "sparse")
     os.makedirs(sparse, exist_ok=True)
@@ -84,90 +81,7 @@ def run_colmap_sparse(image_dir, workspace):
     return recon_dir
 
 
-def _subsample_image_dir(image_dir, workspace, max_frames=20):
-    """Copy at most max_frames evenly-spaced images into a new dir for MVS."""
-    import shutil
-    imgs = sorted(os.listdir(image_dir))
-    if len(imgs) <= max_frames:
-        return image_dir
-    step = len(imgs) / max_frames
-    chosen = [imgs[int(i * step)] for i in range(max_frames)]
-    mvs_dir = os.path.join(workspace, "mvs_images")
-    os.makedirs(mvs_dir, exist_ok=True)
-    for name in chosen:
-        shutil.copy(os.path.join(image_dir, name), os.path.join(mvs_dir, name))
-    return mvs_dir
-
-
-def run_colmap_dense(image_dir, workspace, sparse_dir):
-    """COLMAP MVS: undistort → patch_match_stereo → stereo_fusion → dense PLY.
-
-    Uses xvfb-run for headless OpenGL, 20 frames at 500px, no geom_consistency
-    to stay within memory and time limits on a RunPod serverless worker.
-    """
-    mvs_image_dir = _subsample_image_dir(image_dir, workspace, max_frames=20)
-    dense_dir = os.path.join(workspace, "dense")
-    os.makedirs(dense_dir, exist_ok=True)
-    env = {**os.environ, "QT_QPA_PLATFORM": "offscreen"}
-
-    print("[scan] MVS 1/3: image undistortion…")
-    run_cmd([
-        "colmap", "image_undistorter",
-        "--image_path", mvs_image_dir,
-        "--input_path", sparse_dir,
-        "--output_path", dense_dir,
-        "--output_type", "COLMAP",
-        "--max_image_size", "500",
-    ], timeout=120, env=env)
-
-    print("[scan] MVS 2/3: patch match stereo…")
-    run_cmd([
-        "xvfb-run", "-a",
-        "colmap", "patch_match_stereo",
-        "--workspace_path", dense_dir,
-        "--workspace_format", "COLMAP",
-        "--PatchMatchStereo.max_image_size", "500",
-        "--PatchMatchStereo.geom_consistency", "false",
-        "--PatchMatchStereo.gpu_index", "0",
-        "--PatchMatchStereo.depth_min", "0.01",
-        "--PatchMatchStereo.depth_max", "20",
-    ], timeout=240, env=env)
-
-    print("[scan] MVS 3/3: stereo fusion…")
-    fused_path = os.path.join(dense_dir, "fused.ply")
-    run_cmd([
-        "colmap", "stereo_fusion",
-        "--workspace_path", dense_dir,
-        "--workspace_format", "COLMAP",
-        "--input_type", "photometric",
-        "--output_path", fused_path,
-        "--StereoFusion.max_reproj_error", "2",
-        "--StereoFusion.min_num_pixels", "3",
-    ], timeout=180, env=env)
-
-    return fused_path
-
-
-def read_dense_ply(path):
-    """Read x,y,z,r,g,b from COLMAP stereo_fusion PLY (binary_little_endian)."""
-    from plyfile import PlyData
-    pd = PlyData.read(path)
-    v  = pd["vertex"]
-    points = np.stack([
-        np.asarray(v["x"], dtype=np.float32),
-        np.asarray(v["y"], dtype=np.float32),
-        np.asarray(v["z"], dtype=np.float32),
-    ], axis=1)
-    colors = np.stack([
-        np.asarray(v["red"],   dtype=np.uint8),
-        np.asarray(v["green"], dtype=np.uint8),
-        np.asarray(v["blue"],  dtype=np.uint8),
-    ], axis=1)
-    return points, colors
-
-
-def extract_sparse_points(sparse_dir):
-    """Extract 3D points with colors from COLMAP points3D.txt."""
+def extract_colored_points(sparse_dir):
     points, colors = [], []
     with open(os.path.join(sparse_dir, "points3D.txt")) as f:
         for line in f:
@@ -180,7 +94,6 @@ def extract_sparse_points(sparse_dir):
 
 
 def write_ply(points, colors):
-    """Write colored point cloud as binary PLY."""
     N = len(points)
     header = (
         "ply\nformat binary_little_endian 1.0\n"
@@ -210,28 +123,18 @@ def handler(job):
             img = img.resize((960, 720))
             img.save(os.path.join(image_dir, f"{i:04d}.jpg"), quality=90)
 
-        print("[scan] Running COLMAP sparse SfM…")
+        print("[scan] Running COLMAP SfM…")
         try:
-            sparse_dir = run_colmap_sparse(image_dir, workspace)
+            sparse_dir = run_colmap(image_dir, workspace)
         except subprocess.CalledProcessError as e:
-            return {"error": f"COLMAP failed: {e.stderr.decode()[:500] if e.stderr else str(e)}"}
+            err = e.stderr.decode()[:500] if isinstance(e.stderr, bytes) else str(e.stderr)
+            return {"error": f"COLMAP failed: {err}"}
 
-        sparse_pts, sparse_clr = extract_sparse_points(sparse_dir)
-        print(f"[scan] Sparse SfM: {len(sparse_pts):,} points")
+        points, colors = extract_colored_points(sparse_dir)
+        print(f"[scan] {len(points):,} sparse points")
 
-        if len(sparse_pts) < 50:
+        if len(points) < 50:
             return {"error": "Too few points — try a slower, more overlapping video walkthrough"}
-
-        # Dense MVS: 50k-300k points vs 1k-10k sparse — needed for furniture detection
-        points, colors, dense_ok = sparse_pts, sparse_clr, False
-        try:
-            dense_ply = run_colmap_dense(image_dir, workspace, sparse_dir)
-            d_pts, d_clr = read_dense_ply(dense_ply)
-            print(f"[scan] Dense MVS: {len(d_pts):,} points")
-            if len(d_pts) > len(sparse_pts):
-                points, colors, dense_ok = d_pts, d_clr, True
-        except Exception as e:
-            print(f"[scan] Dense MVS unavailable ({type(e).__name__}: {e}), using sparse")
 
         ply_bytes = write_ply(points, colors)
         ply_b64   = base64.b64encode(ply_bytes).decode()
@@ -239,7 +142,6 @@ def handler(job):
     return {
         "ply_base64":  ply_b64,
         "point_count": len(points),
-        "dense":       dense_ok,
     }
 
 
