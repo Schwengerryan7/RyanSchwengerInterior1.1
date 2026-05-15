@@ -13,10 +13,24 @@ Input:  { images_base64: [str, ...] }
 Output: { ply_base64: str, point_count: int, dense: bool }
 """
 
-import runpod, base64, os, io, tempfile, subprocess
+import runpod, base64, os, io, tempfile, subprocess, signal
 import numpy as np
 from PIL import Image
 import struct
+
+
+def run_cmd(cmd, timeout, env):
+    """Run a command, hard-killing the process if it exceeds timeout."""
+    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+        if proc.returncode != 0:
+            raise subprocess.CalledProcessError(proc.returncode, cmd, stdout, stderr)
+        return stdout, stderr
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.communicate()
+        raise subprocess.CalledProcessError(-1, cmd, b'', b'timeout')
 
 
 def run_colmap_sparse(image_dir, workspace):
@@ -26,28 +40,28 @@ def run_colmap_sparse(image_dir, workspace):
 
     env = {**os.environ, "QT_QPA_PLATFORM": "offscreen"}
 
-    subprocess.run([
+    run_cmd([
         "colmap", "feature_extractor",
         "--database_path", db,
         "--image_path", image_dir,
         "--ImageReader.single_camera", "1",
         "--SiftExtraction.use_gpu", "0",
-    ], check=True, capture_output=True, env=env)
+    ], timeout=120, env=env)
 
-    subprocess.run([
+    run_cmd([
         "colmap", "sequential_matcher",
         "--database_path", db,
         "--SiftMatching.use_gpu", "0",
         "--SequentialMatching.overlap", "15",
-    ], check=True, capture_output=True, env=env)
+    ], timeout=120, env=env)
 
-    subprocess.run([
+    run_cmd([
         "colmap", "mapper",
         "--database_path", db,
         "--image_path", image_dir,
         "--output_path", sparse,
         "--Mapper.num_threads", "4",
-    ], check=True, capture_output=True, env=env)
+    ], timeout=300, env=env)
 
     recon_dirs = sorted([
         d for d in os.listdir(sparse)
@@ -60,12 +74,12 @@ def run_colmap_sparse(image_dir, workspace):
         )
     recon_dir = os.path.join(sparse, recon_dirs[0])
 
-    subprocess.run([
+    run_cmd([
         "colmap", "model_converter",
         "--input_path", recon_dir,
         "--output_path", recon_dir,
         "--output_type", "TXT",
-    ], check=True, capture_output=True, env=env)
+    ], timeout=60, env=env)
 
     return recon_dir
 
@@ -97,17 +111,17 @@ def run_colmap_dense(image_dir, workspace, sparse_dir):
     env = {**os.environ, "QT_QPA_PLATFORM": "offscreen"}
 
     print("[scan] MVS 1/3: image undistortion…")
-    subprocess.run([
+    run_cmd([
         "colmap", "image_undistorter",
         "--image_path", mvs_image_dir,
         "--input_path", sparse_dir,
         "--output_path", dense_dir,
         "--output_type", "COLMAP",
         "--max_image_size", "500",
-    ], check=True, capture_output=True, env=env, timeout=120)
+    ], timeout=120, env=env)
 
     print("[scan] MVS 2/3: patch match stereo…")
-    subprocess.run([
+    run_cmd([
         "xvfb-run", "-a",
         "colmap", "patch_match_stereo",
         "--workspace_path", dense_dir,
@@ -117,11 +131,11 @@ def run_colmap_dense(image_dir, workspace, sparse_dir):
         "--PatchMatchStereo.gpu_index", "0",
         "--PatchMatchStereo.depth_min", "0.01",
         "--PatchMatchStereo.depth_max", "20",
-    ], check=True, capture_output=True, env=env, timeout=300)
+    ], timeout=240, env=env)
 
     print("[scan] MVS 3/3: stereo fusion…")
     fused_path = os.path.join(dense_dir, "fused.ply")
-    subprocess.run([
+    run_cmd([
         "colmap", "stereo_fusion",
         "--workspace_path", dense_dir,
         "--workspace_format", "COLMAP",
@@ -129,7 +143,7 @@ def run_colmap_dense(image_dir, workspace, sparse_dir):
         "--output_path", fused_path,
         "--StereoFusion.max_reproj_error", "2",
         "--StereoFusion.min_num_pixels", "3",
-    ], check=True, capture_output=True, env=env, timeout=180)
+    ], timeout=180, env=env)
 
     return fused_path
 
