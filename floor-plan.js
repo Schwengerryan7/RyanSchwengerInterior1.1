@@ -430,6 +430,10 @@
       const [cx, cy] = o.center;
       const [sw, sh]  = o.scale || [40, 40];
       const hw = sw / 2, hh = sh / 2;
+      const label = (o.label || '').toLowerCase();
+      const key   = Object.keys(OBJ_TYPES).find(k => label.includes(k));
+      const type  = OBJ_TYPES[key];
+      const isCylinder = type?.shape === 'cylinder';
 
       ctx.save();
       ctx.translate(cx, cy);
@@ -439,7 +443,11 @@
       ctx.lineWidth = 1;
       ctx.fillStyle = 'rgba(200,195,185,0.3)';
       ctx.beginPath();
-      ctx.rect(-hw, -hh, sw, sh);
+      if (isCylinder) {
+        ctx.arc(0, 0, Math.min(hw, hh), 0, Math.PI * 2);
+      } else {
+        ctx.rect(-hw, -hh, sw, sh);
+      }
       ctx.fill();
       ctx.stroke();
 
@@ -606,18 +614,72 @@
     }
   }
 
-  // Object type → { height(m), color, label }
+  // Object type → { height(m), color, shape? }
+  // shape: 'box' (default) | 'cylinder'
   const OBJ_TYPES = {
-    sofa:       { h: 0.85, color: 0x8b7355 }, couch:      { h: 0.85, color: 0x8b7355 },
-    chair:      { h: 0.90, color: 0xa0785a }, armchair:   { h: 0.90, color: 0xa0785a },
-    bed:        { h: 0.55, color: 0x9b8ea0 }, desk:       { h: 0.76, color: 0xc4a882 },
-    table:      { h: 0.76, color: 0xc4a882 }, dining:     { h: 0.76, color: 0xc4a882 },
-    cabinet:    { h: 1.20, color: 0xb0a090 }, wardrobe:   { h: 1.80, color: 0xa89880 },
-    shelf:      { h: 1.60, color: 0xb8a888 }, bookcase:   { h: 1.60, color: 0xb8a888 },
-    toilet:     { h: 0.40, color: 0xe8e8e8 }, bathtub:    { h: 0.55, color: 0xd0d8e0 },
-    sink:       { h: 0.85, color: 0xd8dce0 }, shower:     { h: 0.10, color: 0xc8d8e8 },
-    tv:         { h: 1.10, color: 0x303030 }, television: { h: 1.10, color: 0x303030 },
-    refrigerator:{h:1.70, color: 0xd0d0d0 }, fridge:     { h: 1.70, color: 0xd0d0d0 },
+    // Seating
+    sofa:         { h: 0.85, color: 0x8b7355 },
+    couch:        { h: 0.85, color: 0x8b7355 },
+    sectional:    { h: 0.85, color: 0x8b7355 },
+    loveseat:     { h: 0.85, color: 0x9b8060 },
+    chair:        { h: 0.90, color: 0xa0785a },
+    armchair:     { h: 0.90, color: 0xa0785a },
+    recliner:     { h: 0.95, color: 0x906848 },
+    ottoman:      { h: 0.45, color: 0xb09070 },
+    stool:        { h: 0.75, color: 0xc0a880 },
+    bench:        { h: 0.50, color: 0xb8a070 },
+    // Sleep
+    bed:          { h: 0.55, color: 0x9b8ea0 },
+    nightstand:   { h: 0.65, color: 0xc0a882 },
+    dresser:      { h: 1.20, color: 0xb09870 },
+    // Tables & desks
+    desk:         { h: 0.76, color: 0xc4a882 },
+    table:        { h: 0.76, color: 0xc4a882 },
+    dining:       { h: 0.76, color: 0xd0b890 },
+    coffee:       { h: 0.45, color: 0xb89860 },
+    side:         { h: 0.60, color: 0xc0a870 },
+    console:      { h: 0.80, color: 0xb8a070 },
+    // Storage
+    cabinet:      { h: 1.20, color: 0xb0a090 },
+    wardrobe:     { h: 1.90, color: 0xa89880 },
+    shelf:        { h: 1.60, color: 0xb8a888 },
+    bookcase:     { h: 1.80, color: 0xb8a888 },
+    bookshelf:    { h: 1.80, color: 0xb8a888 },
+    chest:        { h: 0.80, color: 0xb09070 },
+    credenza:     { h: 0.85, color: 0xb09870 },
+    // Lighting — cylinder shape
+    lamp:         { h: 1.50, color: 0xf0e0a0, shape: 'cylinder' },
+    floor_lamp:   { h: 1.60, color: 0xf0e0a0, shape: 'cylinder' },
+    table_lamp:   { h: 0.55, color: 0xf0e0a0, shape: 'cylinder' },
+    light:        { h: 1.50, color: 0xf0e0a0, shape: 'cylinder' },
+    chandelier:   { h: 0.60, color: 0xf5e898, shape: 'cylinder' },
+    // AV & tech
+    tv:           { h: 1.10, color: 0x303030 },
+    television:   { h: 1.10, color: 0x303030 },
+    monitor:      { h: 1.00, color: 0x303030 },
+    speaker:      { h: 0.90, color: 0x404040 },
+    // Kitchen
+    refrigerator: { h: 1.75, color: 0xd0d0d0 },
+    fridge:       { h: 1.75, color: 0xd0d0d0 },
+    stove:        { h: 0.90, color: 0x606060 },
+    oven:         { h: 0.90, color: 0x606060 },
+    microwave:    { h: 1.40, color: 0x707070 },
+    dishwasher:   { h: 0.90, color: 0xd0d0d0 },
+    counter:      { h: 0.90, color: 0xd8c8a8 },
+    island:       { h: 0.90, color: 0xd8c8a8 },
+    // Bathroom
+    toilet:       { h: 0.40, color: 0xe8e8e8 },
+    bathtub:      { h: 0.55, color: 0xd0d8e0 },
+    sink:         { h: 0.85, color: 0xd8dce0 },
+    shower:       { h: 0.10, color: 0xc8d8e8 },
+    vanity:       { h: 0.85, color: 0xd0ccc0 },
+    // Decor & misc
+    plant:        { h: 1.20, color: 0x5a8a50, shape: 'cylinder' },
+    mirror:       { h: 1.60, color: 0xd0e8f0 },
+    piano:        { h: 1.20, color: 0x202020 },
+    fireplace:    { h: 1.10, color: 0x706050 },
+    curtain:      { h: 2.20, color: 0xd8c8b0 },
+    rug:          { h: 0.02, color: 0xc08060 },
   };
 
   function makeFloorTexture(THREE) {
@@ -792,13 +854,19 @@
     (p.objects || []).forEach(o => {
       const label = (o.label || '').toLowerCase();
       const key   = Object.keys(OBJ_TYPES).find(k => label.includes(k));
-      const type  = OBJ_TYPES[key] || { h: 0.5, color: 0xc8b99a };
+      const type  = OBJ_TYPES[key] || { h: 0.5, color: 0xc8b99a, shape: 'box' };
       const [ox, oy] = o.center;
       const [sw, sd] = o.scale ? [Math.max(o.scale[0]/S, 0.2), Math.max(o.scale[1]/S, 0.2)] : [0.6, 0.6];
       const sh = type.h;
 
-      const mat  = new THREE.MeshStandardMaterial({ color: type.color, roughness: 0.8, metalness: 0.05 });
-      const geo  = new THREE.BoxGeometry(sw, sh, sd);
+      const mat = new THREE.MeshStandardMaterial({ color: type.color, roughness: 0.8, metalness: 0.05 });
+      let geo;
+      if (type.shape === 'cylinder') {
+        const r = Math.min(sw, sd) / 2;
+        geo = new THREE.CylinderGeometry(r, r, sh, 16);
+      } else {
+        geo = new THREE.BoxGeometry(sw, sh, sd);
+      }
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(ox / S, sh / 2, -oy / S);
       mesh.rotation.y = -(o.rot || 0);

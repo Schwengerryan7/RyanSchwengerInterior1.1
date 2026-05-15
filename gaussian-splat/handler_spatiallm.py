@@ -75,19 +75,33 @@ def _clean_pcd(xyz: np.ndarray, rgb: np.ndarray):
     """Statistical outlier removal + voxel downsampling in pure numpy."""
     from scipy.spatial import KDTree
 
+    print(f"[SpatialLM] Cleaning {len(xyz):,} raw points…")
+
     # Statistical outlier removal
+    k = min(21, len(xyz) - 1)
     tree = KDTree(xyz)
-    dists, _ = tree.query(xyz, k=21)
+    dists, _ = tree.query(xyz, k=k)
     mean_dists = dists[:, 1:].mean(axis=1)
     threshold = mean_dists.mean() + 2.0 * mean_dists.std()
     mask = mean_dists < threshold
     xyz, rgb = xyz[mask], rgb[mask]
+    print(f"[SpatialLM] After outlier removal: {len(xyz):,} points")
 
-    # Voxel downsampling at 2 cm
-    voxel_size = 0.02
+    # 1 cm voxel (was 2 cm) — keeps 4x more points, critical for furniture detection
+    voxel_size = 0.01
     voxel_ids = np.floor(xyz / voxel_size).astype(np.int32)
     _, unique_idx = np.unique(voxel_ids, axis=0, return_index=True)
-    return xyz[unique_idx], rgb[unique_idx]
+    xyz, rgb = xyz[unique_idx], rgb[unique_idx]
+    print(f"[SpatialLM] After 1cm voxel: {len(xyz):,} points")
+
+    # Cap at 200k to avoid OOM — random subsample if larger
+    MAX_PTS = 200_000
+    if len(xyz) > MAX_PTS:
+        idx = np.random.choice(len(xyz), MAX_PTS, replace=False)
+        xyz, rgb = xyz[idx], rgb[idx]
+        print(f"[SpatialLM] Subsampled to {MAX_PTS:,} points")
+
+    return xyz, rgb
 
 
 def _orient_z_up(xyz: np.ndarray, rgb: np.ndarray):
