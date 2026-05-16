@@ -67,7 +67,7 @@ def run_colmap(image_dir, workspace):
     if not recon_dirs:
         raise subprocess.CalledProcessError(
             1, "colmap mapper",
-            stderr=b"Mapper produced no reconstruction — video may move too fast or lack texture."
+            stderr=b"Mapper produced no reconstruction - video may move too fast or lack texture."
         )
     recon_dir = os.path.join(sparse, recon_dirs[0])
 
