@@ -21,6 +21,86 @@ from PIL import Image
 import struct
 import torch
 
+# ─── Grounding DINO ──────────────────────────────────────────────────────────
+
+_gd_model     = None
+_gd_processor = None
+
+DETECT_PROMPT = (
+    "bed. sofa. couch. armchair. chair. recliner. ottoman. bench. stool. "
+    "desk. table. coffee table. dining table. nightstand. dresser. wardrobe. "
+    "bookshelf. shelf. cabinet. chest. credenza. "
+    "lamp. floor lamp. television. monitor. speaker. "
+    "refrigerator. stove. microwave. sink. toilet. bathtub. "
+    "plant. mirror. rug. curtain. clothes. pillow. bag. backpack. "
+    "bicycle. guitar. piano. fireplace. fan. heater. "
+)
+
+def ensure_grounding_dino():
+    global _gd_model, _gd_processor
+    if _gd_model is not None:
+        return
+    from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
+    print("[scan] Loading Grounding DINO tiny…")
+    _gd_processor = AutoProcessor.from_pretrained("IDEA-Research/grounding-dino-tiny")
+    _gd_model = AutoModelForZeroShotObjectDetection.from_pretrained(
+        "IDEA-Research/grounding-dino-tiny"
+    ).to("cuda").eval()
+    print("[scan] Grounding DINO ready.")
+
+
+def detect_objects(img_pil, threshold=0.30):
+    """Run Grounding DINO. Returns [{label, box:[x1,y1,x2,y2], score}]."""
+    inputs = _gd_processor(
+        images=img_pil, text=DETECT_PROMPT, return_tensors="pt"
+    ).to("cuda")
+    with torch.no_grad():
+        outputs = _gd_model(**inputs)
+    results = _gd_processor.post_process_grounded_object_detection(
+        outputs, inputs.input_ids,
+        box_threshold=threshold, text_threshold=threshold,
+        target_sizes=[img_pil.size[::-1]],
+    )[0]
+    return [
+        {"label": lbl, "box": box.cpu().tolist(), "score": float(sc)}
+        for box, sc, lbl in zip(results["boxes"], results["scores"], results["labels"])
+    ]
+
+
+def detection_3d_pos(box_xyxy, scaled_depth, cam, R, T):
+    """Back-project 2D detection centre to COLMAP world space."""
+    x1, y1, x2, y2 = box_xyxy
+    cx_px = (x1 + x2) / 2
+    cy_px = (y1 + y2) / 2
+    w_px  = x2 - x1
+    h_px  = y2 - y1
+
+    da_h, da_w = scaled_depth.shape
+    u_d = int(cx_px * da_w / IMG_W); u_d = max(0, min(u_d, da_w - 1))
+    v_d = int(cy_px * da_h / IMG_H); v_d = max(0, min(v_d, da_h - 1))
+    z   = float(scaled_depth[v_d, u_d])
+    if z < 0.1 or z > MAX_DEPTH:
+        return None, None, None
+
+    fx, fy, cx, cy = cam["fx"], cam["fy"], cam["cx"], cam["cy"]
+    pt_cam  = np.array([(cx_px - cx) * z / fx, (cy_px - cy) * z / fy, z], dtype=np.float32)
+    pt_world = R.T @ (pt_cam - T)
+    return pt_world, float(w_px * z / fx), float(h_px * z / fy)
+
+
+def deduplicate(objects, radius=0.8):
+    """3-D NMS: keep highest-score detection per label within radius."""
+    kept = []
+    for obj in sorted(objects, key=lambda o: o["score"], reverse=True):
+        dup = any(
+            k["label"] == obj["label"] and
+            float(np.linalg.norm(np.array(k["pos"]) - np.array(obj["pos"]))) < radius
+            for k in kept
+        )
+        if not dup:
+            kept.append(obj)
+    return kept
+
 IMG_W, IMG_H = 960, 720
 STRIDE       = 4        # sample every 4th pixel per frame (~43k pts/frame)
 MAX_DEPTH    = 8.0      # metres — clip far background
@@ -312,9 +392,18 @@ def handler(job):
             return {"error": f"Failed to load DepthAnything: {e}"}
 
         all_pts, all_clr = [], []
-        aligned, skipped = 0, 0
+        raw_detections    = []
+        aligned, skipped  = 0, 0
 
-        for name, img_pil in frames:
+        # Load DINO once before the frame loop
+        try:
+            ensure_grounding_dino()
+            dino_ok = True
+        except Exception as e:
+            print(f"[scan] Grounding DINO unavailable: {e}")
+            dino_ok = False
+
+        for frame_idx, (name, img_pil) in enumerate(frames):
             if name not in images_data:
                 continue
             d = images_data[name]
@@ -326,12 +415,40 @@ def handler(job):
                 skipped += 1
                 continue
 
+            scaled_depth = (s * da_depth + t).astype(np.float32)
             pts, clr = backproject_frame(da_depth, img_pil, cam, R, T, s, t)
             all_pts.append(pts)
             all_clr.append(clr)
             aligned += 1
 
+            # Run Grounding DINO every 5th registered frame
+            if dino_ok and aligned % 5 == 0:
+                try:
+                    dets = detect_objects(img_pil)
+                    for det in dets:
+                        pos, w_m, d_m = detection_3d_pos(det["box"], scaled_depth, cam, R, T)
+                        if pos is not None:
+                            raw_detections.append({
+                                "label": det["label"],
+                                "pos":   pos.tolist(),
+                                "w":     round(w_m, 2),
+                                "d":     round(d_m, 2),
+                                "score": det["score"],
+                            })
+                except Exception as e:
+                    print(f"[scan] DINO frame error: {e}")
+
+        detected_objects = deduplicate(raw_detections)
+        # Serialise pos → x,y,z keys
+        detected_objects = [
+            {"label": o["label"],
+             "x": round(o["pos"][0], 3), "y": round(o["pos"][1], 3), "z": round(o["pos"][2], 3),
+             "w": o["w"], "d": o["d"]}
+            for o in detected_objects
+        ]
         print(f"[scan] {aligned} frames depth-aligned, {skipped} skipped")
+        print(f"[scan] {len(detected_objects)} objects detected: "
+              f"{[o['label'] for o in detected_objects]}")
 
         if not all_pts:
             # Fallback: return sparse points so pipeline doesn't die
@@ -355,7 +472,11 @@ def handler(job):
         ply_bytes = write_ply(pts_ds, clr_ds)
         ply_b64   = base64.b64encode(ply_bytes).decode()
 
-    return {"ply_base64": ply_b64, "point_count": len(pts_ds)}
+    return {
+        "ply_base64":       ply_b64,
+        "point_count":      len(pts_ds),
+        "detected_objects": detected_objects,
+    }
 
 
 runpod.serverless.start({"handler": handler})

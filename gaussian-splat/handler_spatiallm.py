@@ -107,16 +107,16 @@ def _clean_pcd(xyz: np.ndarray, rgb: np.ndarray):
 def _orient_z_up(xyz: np.ndarray, rgb: np.ndarray):
     ranges = xyz.max(axis=0) - xyz.min(axis=0)
     vertical_axis = int(np.argmin(ranges))
+    print(f"[SpatialLM] orient_z_up: vertical_axis={vertical_axis}, ranges={ranges.tolist()}")
 
     if vertical_axis == 2:
-        return xyz, rgb
-
-    if vertical_axis == 1:
+        R = np.eye(3, dtype=np.float32)
+    elif vertical_axis == 1:
         R = np.array([[1,0,0],[0,0,-1],[0,1,0]], dtype=np.float32)
     else:
         R = np.array([[0,1,0],[0,0,1],[1,0,0]], dtype=np.float32)
 
-    return (xyz @ R.T), rgb
+    return (xyz @ R.T), rgb, R
 
 
 def _run_spatiallm(xyz: np.ndarray, rgb: np.ndarray) -> dict:
@@ -215,14 +215,39 @@ def handler(job):
         print(f"[SpatialLM] {len(xyz):,} raw points")
 
         xyz, rgb = _clean_pcd(xyz, rgb)
-        print(f"[SpatialLM] {len(xyz):,} cleaned points")
-
-        xyz, rgb = _orient_z_up(xyz, rgb)
+        xyz, rgb, orient_R = _orient_z_up(xyz, rgb)
         result = _run_spatiallm(xyz, rgb)
 
         print(f"[SpatialLM] {len(result['walls'])} walls  "
               f"{len(result['doors'])} doors  "
-              f"{len(result['objects'])} objects")
+              f"{len(result['objects'])} SpatialLM objects")
+
+        # Merge Grounding DINO detected objects from scan handler
+        scan_objects = inp.get("detected_objects", [])
+        if scan_objects:
+            b = result["bounds"]
+            dino_objs = []
+            for o in scan_objects:
+                # Apply same orient_z_up rotation to COLMAP world coords
+                pos = np.array([o["x"], o["y"], o["z"]], dtype=np.float32)
+                pos_oriented = orient_R @ pos
+                fx, fy = float(pos_oriented[0]), float(pos_oriented[1])
+                # Check if within room bounds (with 20% margin)
+                margin_x = (b["max_x"] - b["min_x"]) * 0.2
+                margin_y = (b["max_y"] - b["min_y"]) * 0.2
+                if not (b["min_x"] - margin_x <= fx <= b["max_x"] + margin_x and
+                        b["min_y"] - margin_y <= fy <= b["max_y"] + margin_y):
+                    continue
+                dino_objs.append({
+                    "class":    o["label"],
+                    "center":   [fx, fy],
+                    "rotation": 0.0,
+                    "scale":    [o.get("w", 0.5), o.get("d", 0.5)],
+                })
+            print(f"[SpatialLM] {len(dino_objs)} DINO objects merged")
+            # DINO objects go first — they're real detections; SpatialLM objects appended
+            result["objects"] = dino_objs + result["objects"]
+
         return result
 
     finally:

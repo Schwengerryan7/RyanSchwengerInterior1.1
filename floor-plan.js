@@ -205,6 +205,10 @@
       } else {
         body = { ply_url: window._plyUrl };
       }
+      // Include Grounding DINO detections from scan stage
+      if (window._scanDetectedObjects?.length) {
+        body.detected_objects = window._scanDetectedObjects;
+      }
 
       // Submit job
       const submitRes = await fetch(`${API_BASE}/floorplan/run`, {

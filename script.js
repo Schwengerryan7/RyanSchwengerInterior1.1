@@ -189,6 +189,8 @@ async function triggerRoomScan(videoFile) {
 
       if (status.status === 'COMPLETED') {
         setScanStatus('Scan complete — generating floor plan…');
+        window._scanDetectedObjects = status.output.detected_objects || [];
+        console.log('[scan] detected objects:', window._scanDetectedObjects.map(o => o.label));
         const plyBlob = new Blob(
           [Uint8Array.from(atob(status.output.ply_base64), c => c.charCodeAt(0))],
           { type: 'application/octet-stream' }
