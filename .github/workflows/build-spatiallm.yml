@@ -1,10 +1,10 @@
-name: Build SpatialLM Docker Image
+name: Build Floor Plan Docker Image (RoomFormer)
 
 on:
   push:
     paths:
-      - 'gaussian-splat/handler_spatiallm.py'
-      - 'gaussian-splat/Dockerfile.spatiallm'
+      - 'gaussian-splat/handler_floorplan.py'
+      - 'gaussian-splat/Dockerfile.floorplan'
     branches: [main]
   workflow_dispatch:
 
@@ -34,6 +34,6 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./gaussian-splat
-          file: ./gaussian-splat/Dockerfile.spatiallm
+          file: ./gaussian-splat/Dockerfile.floorplan
           push: true
-          tags: schwengerryan7/spatiallm:latest
+          tags: schwengerryan7/floorplan:latest

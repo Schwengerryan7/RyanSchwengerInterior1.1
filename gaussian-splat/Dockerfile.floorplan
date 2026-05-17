@@ -1,0 +1,50 @@
+FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    git wget unzip build-essential \
+    libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+# Core runtime deps
+RUN pip install --no-cache-dir \
+    runpod requests plyfile numpy scipy pillow
+
+# RoomFormer deps — pin timm to the version the paper used
+RUN pip install --no-cache-dir \
+    "timm==0.5.4" \
+    "shapely>=1.8" \
+    "omegaconf>=2.2" \
+    "fairscale>=0.4" \
+    "fvcore" \
+    "pycocotools" \
+    "descartes" \
+    "opencv-python-headless" \
+    "tqdm"
+
+# Clone RoomFormer (MIT licence)
+RUN git clone --depth 1 https://github.com/ywyue/RoomFormer /workspace/RoomFormer
+
+# Install any remaining deps from the repo's requirements.txt
+# (ignore errors — some training-only packages are optional)
+RUN pip install --no-cache-dir -r /workspace/RoomFormer/requirements.txt || true
+
+# Download Structured3D pretrained checkpoint from ETH polybox
+# The zip contains roomformer_structured3d.pth + roomformer_scenecad.pth
+RUN wget -q -O /tmp/roomformer_ckpts.zip \
+    "https://polybox.ethz.ch/index.php/s/vlBo66X0NTrcsTC/download" && \
+    cd /tmp && unzip -o roomformer_ckpts.zip && \
+    # Find and move the Structured3D checkpoint regardless of exact filename
+    find /tmp -maxdepth 2 -name "*.pth" | grep -i stru | head -1 | \
+        xargs -I{} mv {} /workspace/roomformer_stru3d.pth && \
+    rm -rf /tmp/roomformer_ckpts.zip /tmp/__MACOSX
+
+# Warm the model on startup (optional — comment out to save cold-start RAM)
+# RUN python -c "import torch; print('CUDA:', torch.cuda.is_available())"
+
+COPY handler_floorplan.py /workspace/handler_floorplan.py
+
+CMD ["python", "-u", "/workspace/handler_floorplan.py"]
