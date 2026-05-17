@@ -294,6 +294,7 @@ function init3DViewer(container) {
   container.appendChild(canvas);
 
   function loadScript(src, cb) {
+    if (document.querySelector(`script[src="${src}"]`)) { cb(); return; }
     const s = document.createElement('script'); s.src = src; s.onload = cb; document.head.appendChild(s);
   }
 

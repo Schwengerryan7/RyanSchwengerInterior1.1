@@ -79,7 +79,7 @@ def detection_3d_pos(box_xyxy, scaled_depth, cam, R, T):
     u_d = int(cx_px * da_w / IMG_W); u_d = max(0, min(u_d, da_w - 1))
     v_d = int(cy_px * da_h / IMG_H); v_d = max(0, min(v_d, da_h - 1))
     z   = float(scaled_depth[v_d, u_d])
-    if z < 0.1 or z > MAX_DEPTH:
+    if z <= 0:
         return None, None, None
 
     fx, fy, cx, cy = cam["fx"], cam["fy"], cam["cx"], cam["cy"]
@@ -270,7 +270,7 @@ def align_scale(da_depth, cam, R, T, sparse_pts):
 
     for pt in sparse_pts:
         pt_cam = R @ pt + T
-        if pt_cam[2] <= 0.1:
+        if pt_cam[2] <= 0:   # only reject behind-camera points
             continue
         u = fx * pt_cam[0] / pt_cam[2] + cx
         v = fy * pt_cam[1] / pt_cam[2] + cy
@@ -286,7 +286,10 @@ def align_scale(da_depth, cam, R, T, sparse_pts):
 
     A = np.stack([np.array(da_vals), np.ones(len(da_vals))], axis=1)
     (s, t), *_ = np.linalg.lstsq(A, np.array(metric_vals), rcond=None)
-    return (float(s), float(t)) if s > 0 else (None, None)
+    if s <= 0:
+        return None, None
+    print(f"[scan] scale fit: s={s:.4f} t={t:.4f} anchors={len(da_vals)}")
+    return float(s), float(t)
 
 
 # ─── Back-projection ─────────────────────────────────────────────────────────
@@ -320,7 +323,15 @@ def backproject_frame(da_depth, img_pil, cam, R, T, s, t):
     rgb = rgb_arr[v_s.astype(int).ravel().clip(0, IMG_H-1),
                   u_s.astype(int).ravel().clip(0, IMG_W-1)]
 
-    valid = (z.ravel() > 0.1) & (z.ravel() < MAX_DEPTH)
+    z_flat = z.ravel()
+    valid = z_flat > 0
+    if valid.any():
+        z_pos = z_flat[valid]
+        # Percentile filter: discard bottom 2% (near noise) and top 5% (sky / outliers).
+        # Works regardless of COLMAP's arbitrary scale units.
+        lo = float(np.percentile(z_pos, 2))
+        hi = float(np.percentile(z_pos, 95))
+        valid = valid & (z_flat >= lo) & (z_flat <= hi)
     return pts_world[valid].astype(np.float32), rgb[valid]
 
 
@@ -450,15 +461,15 @@ def handler(job):
         print(f"[scan] {len(detected_objects)} objects detected: "
               f"{[o['label'] for o in detected_objects]}")
 
-        if not all_pts:
-            # Fallback: return sparse points so pipeline doesn't die
-            print("[scan] Depth alignment failed — returning sparse fallback")
+        pts_all = np.concatenate(all_pts, axis=0) if all_pts else np.empty((0, 3), dtype=np.float32)
+        clr_all = np.concatenate(all_clr, axis=0) if all_clr else np.empty((0, 3), dtype=np.uint8)
+
+        if len(pts_all) == 0:
+            print("[scan] Depth alignment produced 0 valid points — returning sparse fallback")
             ply_bytes = write_ply(sparse_pts, np.ones((len(sparse_pts), 3), dtype=np.uint8) * 180)
             return {"ply_base64": base64.b64encode(ply_bytes).decode(),
-                    "point_count": len(sparse_pts)}
-
-        pts_all = np.concatenate(all_pts, axis=0)
-        clr_all = np.concatenate(all_clr, axis=0)
+                    "point_count": len(sparse_pts),
+                    "detected_objects": detected_objects}
         print(f"[scan] Raw merged: {len(pts_all):,} points")
 
         pts_ds, clr_ds = voxel_downsample(pts_all, clr_all)
