@@ -214,6 +214,9 @@ def handler(job):
         xyz, rgb = _load_ply(ply_path)
         print(f"[SpatialLM] {len(xyz):,} raw points")
 
+        if len(xyz) < 100:
+            return {"error": f"Point cloud too sparse ({len(xyz)} pts) — scan failed or PLY is empty"}
+
         xyz, rgb = _clean_pcd(xyz, rgb)
         xyz, rgb, orient_R = _orient_z_up(xyz, rgb)
         result = _run_spatiallm(xyz, rgb)
