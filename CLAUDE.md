@@ -1,0 +1,168 @@
+# RyanSchwengerInterior — Project Brief for Claude Code
+
+## The Goal
+Build the most accurate AI-powered floor plan renderer possible.
+Three pillars:
+1. **Accurate floor plan** — correct room shapes, walls, doors, windows
+2. **Object recognition** — every piece of furniture detected, labeled, and placed correctly
+3. **Solid 3D viewing** — a clean, navigable 3D room you can actually use
+
+This is a commercial interior design tool. Every decision should serve accuracy and quality.
+
+---
+
+## What This Project Is
+A browser-based dashboard that takes a room scan (video or point cloud) and produces:
+- A 2D floor plan with labeled rooms, walls, doors, windows, furniture
+- A 3D walkthrough of the same space
+- Material rendering of furniture (Blender + Claude vision)
+
+---
+
+## Current Stack
+
+### Frontend (browser)
+- `index.html` — main dashboard
+- `floor-plan.js` — floor plan viewer (2D canvas + Three.js 3D). This is the most important frontend file.
+- `script.js` — main UI orchestration
+- `proxy.js` — Node.js Express proxy on :3001, routes to RunPod endpoints
+
+### Backend (RunPod serverless endpoints)
+| Endpoint | ID | Purpose |
+|---|---|---|
+| Floor Plan | `cliyu9anwshcle` | PTv3 + RoomFormer → floor plan JSON |
+| Gaussian Splat | `l4cc89v4me7yg4` | COLMAP → point cloud PLY |
+| Blender | `4qqf6weor3acy0` | Furniture rendering |
+| TripoSG | `obyg27dl14g8ws` | Image → 3D mesh (experimental) |
+
+### Docker image for floor plan endpoint
+`schwengerryan7/spatiallm:latest` — despite the name, this now runs PTv3 + RoomFormer (not SpatialLM).
+
+---
+
+## The Floor Plan Pipeline (most important)
+
+```
+Phone video
+  → COLMAP dense reconstruction → PLY point cloud
+  → Point Transformer V3 (PTv3, MIT) → per-point semantic labels
+     (wall, floor, door, window, sofa, bed, toilet, sink, refrigerator…)
+  → Top-down 2D density image projection
+  → RoomFormer (MIT) → closed room polygons
+  → Door/window positions from PTv3 labels
+  → Furniture positions + class names from PTv3 labels
+  → JSON: { rooms, walls, doors, windows, objects, bounds }
+  → floor-plan.js renders 2D + 3D
+```
+
+### Why PTv3 + RoomFormer (not SpatialLM)
+SpatialLM was replaced because it uses CC-BY-NC-4.0 licensed weights — not commercially usable.
+- **PTv3** (`Pointcept/PointTransformerV3`, MIT) — CVPR 2024 Oral, best licensed 3D semantic segmentation
+- **RoomFormer** (`ywyue/RoomFormer`, MIT) — CVPR 2023, specifically designed for room polygon extraction from top-down density images
+
+### Key files for the floor plan backend
+- `gaussian-splat/handler_floorplan.py` — the RunPod handler (PTv3 + RoomFormer)
+- `gaussian-splat/Dockerfile.spatiallm` — Docker image build
+- `.github/workflows/build-spatiallm.yml` — CI/CD: pushes to `schwengerryan7/spatiallm:latest`
+
+### Output JSON format (handler → frontend contract)
+```json
+{
+  "rooms":   [{ "label": "Living Room", "poly": [[x,y],...], "area": 25 }],
+  "walls":   [{ "id": "wall_0", "start": [x,y], "end": [x,y], "height": 2.6 }],
+  "doors":   [{ "position": [x,y], "width": 0.9, "wall_dir": 1.57 }],
+  "windows": [{ "position": [x,y], "width": 1.2 }],
+  "objects": [{ "class": "sofa", "center": [x,y], "rotation": 0.0, "scale": [2.1, 0.9] }],
+  "bounds":  { "min_x": 0, "min_y": 0, "max_x": 10, "max_y": 8, "width": 10, "height": 8 }
+}
+```
+All coordinates in metres.
+
+---
+
+## Frontend Floor Plan Logic (floor-plan.js)
+
+### Room extraction — two-tier approach
+1. **Backend rooms** (preferred): if `data.rooms` has entries, use them directly — these are RoomFormer polygons, geometrically precise
+2. **Local fallback**: `extractRoomsFromWalls(walls, objects)` — DCEL planar face traversal that extracts room polygons from wall graph. Used when the backend returns no rooms.
+
+### Room classification rules
+```
+toilet/bathtub/shower/sink → Bathroom
+refrigerator/counter       → Kitchen
+sofa/couch/tv              → Living Room
+bed                        → Bedroom (largest = Master Bedroom if 2+)
+desk/bookshelf             → Office
+dining table               → Dining Room
+```
+
+### 3D renderer
+Three.js r132, loaded from CDN. `populateScene()` builds:
+- Textured floor (wood plank procedural texture)
+- Walls with shadow casting
+- Furniture as coloured boxes with sprite labels
+- Door panels, point light inside room
+- OrbitControls for navigation
+
+---
+
+## Training Pipeline
+
+### CLI — `fp.py` (run from terminal in this directory)
+```bash
+python fp.py status          # list RunPod pods
+python fp.py train           # spin up GPU pod, train RoomFormer, download checkpoint
+python fp.py eval scan.ply   # evaluate a scan locally
+python fp.py dense video.mp4 # dense COLMAP reconstruction
+python fp.py prep            # preprocess scans → density.png files
+python fp.py deploy          # build + push Docker image
+```
+
+### Training data structure
+```
+data/scans/
+  scan_001/
+    cloud.ply         ← dense point cloud input
+    floor_plan.json   ← ground truth annotation (saved from browser "Save JSON" button)
+    density.png       ← auto-generated by: python fp.py prep
+```
+
+### Fine-tuning loop
+1. Record room video on phone
+2. `python fp.py dense video.mp4` → gets dense PLY
+3. Drop PLY in browser floor plan tab → generate → fix any errors → click "Save JSON"
+4. Move `floor_plan.json` into the scan folder
+5. `python fp.py prep` → generates density.png
+6. `python fp.py train` → fine-tunes RoomFormer on RunPod, streams logs, downloads checkpoint
+
+---
+
+## Environment
+- **Python env**: `conda activate splat` (has numpy, scipy, requests, PIL, plyfile)
+- **RunPod API key**: `RUNPOD_API_KEY` environment variable
+- **Docker**: `schwengerryan7/spatiallm:latest`
+- **Local dev**: `node proxy.js` on :3001, then open `index.html`
+
+---
+
+## Current Status (as of 2026-05-18)
+- FloorPlan endpoint has ~73% failure rate — likely still running old SpatialLM handler, not the new PTv3+RoomFormer code
+- New handler (`handler_floorplan.py`) and Dockerfile are written but not yet built/pushed
+- Need to: git push → GitHub Actions builds new image → update RunPod endpoint → test
+- GaussianSplat endpoint is healthy and ready
+- Blender endpoint is cold but functional
+
+## Immediate priorities
+1. Fix the FloorPlan endpoint — build and deploy the new PTv3+RoomFormer image
+2. Test with a real scan end-to-end
+3. Add dense COLMAP to the scan pipeline (currently only sparse)
+4. Collect training data scans once the endpoint is working
+
+---
+
+## What "done" looks like
+A user records a room walkthrough on their phone. The app produces:
+- A clean 2D floor plan with correctly named rooms, accurate dimensions
+- Every major piece of furniture labeled and positioned correctly
+- A 3D view of the space that matches the real room layout
+- All of this in under 5 minutes from video upload to rendered floor plan

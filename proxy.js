@@ -122,7 +122,7 @@
     }
   });
 
-  // ── Floor plan (SpatialLM) ──────────────────────────────────────────────────
+  // ── Floor plan (PTv3 + RoomFormer) ───────────────────────────────────────────
   app.post('/floorplan/run', express.json({ limit: '200mb' }), async (req, res) => {
     try {
       const { default: fetch } = await import('node-fetch');

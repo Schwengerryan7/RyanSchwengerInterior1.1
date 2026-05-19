@@ -67,6 +67,7 @@
     document.getElementById('fp-zoom-out')?.addEventListener('click',
       () => zoomAt(canvas.width / 2, canvas.height / 2, 0.8));
     document.getElementById('fp-export-png')?.addEventListener('click', exportPNG);
+    document.getElementById('fp-export-json')?.addEventListener('click', exportJSON);
     document.getElementById('fp-generate')?.addEventListener('click', onGenerate);
     document.getElementById('fp-mode-2d')?.addEventListener('click', () => setViewMode('2d'));
     document.getElementById('fp-mode-3d')?.addEventListener('click', () => setViewMode('3d'));
@@ -284,26 +285,205 @@
     }
   }
 
+  // ─── Planar face extraction: walls → room polygons ───────────────────────────
+  // Builds a half-edge graph from wall segments, traverses all faces using the
+  // DCEL "next CW neighbor of reverse edge" rule, filters the outer face, then
+  // classifies each interior face by the furniture objects it contains.
+
+  function pointInPolygon(px, py, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i][0], yi = poly[i][1];
+      const xj = poly[j][0], yj = poly[j][1];
+      if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi)
+        inside = !inside;
+    }
+    return inside;
+  }
+
+  function extractRoomsFromWalls(walls, objects) {
+    if (!walls || walls.length < 3) return [];
+
+    const SNAP = 10; // cm — tolerance for merging nearby wall endpoints
+
+    // 1. Collect vertices with snapping
+    const pts = [];
+    function addPt(x, y) {
+      for (let i = 0; i < pts.length; i++) {
+        if (Math.hypot(pts[i][0] - x, pts[i][1] - y) < SNAP) return i;
+      }
+      pts.push([x, y]);
+      return pts.length - 1;
+    }
+
+    // 2. Build directed half-edges (each wall → forward + backward)
+    const he = []; // [from, to]
+    for (const w of walls) {
+      const a = addPt(w[0][0], w[0][1]);
+      const b = addPt(w[1][0], w[1][1]);
+      if (a === b) continue;
+      he.push([a, b]);
+      he.push([b, a]);
+    }
+    if (he.length < 6) return [];
+
+    // 3. Adjacency: outgoing[v] = [{to, edgeIdx, angle}] sorted ascending (CCW)
+    const out = Array.from({ length: pts.length }, () => []);
+    for (let i = 0; i < he.length; i++) {
+      const [from, to] = he[i];
+      const angle = Math.atan2(pts[to][1] - pts[from][1], pts[to][0] - pts[from][0]);
+      out[from].push({ to, edgeIdx: i, angle });
+    }
+    for (const list of out) list.sort((a, b) => a.angle - b.angle);
+
+    // 4. For directed edge i (u→v), next edge in face = prev CW neighbor of (v→u)
+    function nextInFace(i) {
+      const [from, to] = he[i];
+      const list = out[to];
+      const rev  = list.findIndex(e => e.to === from);
+      if (rev === -1) return -1;
+      return list[(rev - 1 + list.length) % list.length].edgeIdx;
+    }
+
+    // 5. Traverse all faces
+    const visited = new Set();
+    const faces   = [];
+
+    for (let start = 0; start < he.length; start++) {
+      if (visited.has(start)) continue;
+      const poly  = [];
+      let   e     = start;
+      let   guard = he.length + 2;
+      while (!visited.has(e) && guard-- > 0) {
+        visited.add(e);
+        poly.push(pts[he[e][0]]);
+        const next = nextInFace(e);
+        if (next < 0 || next === start) break;
+        e = next;
+      }
+      if (poly.length < 3) continue;
+      let area = 0;
+      for (let i = 0; i < poly.length; i++) {
+        const j = (i + 1) % poly.length;
+        area += poly[i][0] * poly[j][1] - poly[j][0] * poly[i][1];
+      }
+      faces.push({ poly, area: area / 2 });
+    }
+
+    if (!faces.length) return [];
+
+    // 6. Drop the outer face (largest |area|) and tiny noise faces
+    const maxAbs = Math.max(...faces.map(f => Math.abs(f.area)));
+    const MIN_CM2 = 5000; // ~0.5 m²
+    const inner = faces.filter(f => Math.abs(f.area) < maxAbs * 0.95 && Math.abs(f.area) > MIN_CM2);
+
+    // 7. Classify by contained furniture
+    // any:  room matches if ANY key is present
+    // all:  room matches only if ALL keys are present
+    const RULES = [
+      { label: 'Master Bedroom', color: '#e8eaf5', mode: 'all', keys: ['bed', 'wardrobe'] },
+      { label: 'Bedroom',        color: '#eaeaf5', mode: 'any', keys: ['bed'] },
+      { label: 'Bathroom',       color: '#ddf0ec', mode: 'any', keys: ['toilet', 'bathtub', 'shower', 'sink'] },
+      { label: 'Kitchen',        color: '#eaf0e8', mode: 'any', keys: ['refrigerator', 'fridge', 'oven', 'stove', 'microwave'] },
+      { label: 'Living Room',    color: '#f5f0e8', mode: 'any', keys: ['sofa', 'couch', 'tv', 'television'] },
+      { label: 'Dining Room',    color: '#f5ede8', mode: 'any', keys: ['dining table', 'dining_table'] },
+      { label: 'Office',         color: '#f0ece4', mode: 'any', keys: ['desk', 'computer', 'monitor'] },
+    ];
+    const FALLBACK = ['#f5f0e8', '#eaf0e8', '#e8eaf5', '#ddf0ec', '#f5ede8', '#eeece8'];
+
+    // Classify, then promote the largest bedroom to "Master Bedroom" if there are 2+
+    let bedroomCount = 0;
+    const classified = inner.map((f, idx) => {
+      const inside = (objects || []).filter(o => pointInPolygon(o.center[0], o.center[1], f.poly));
+      const lbls   = inside.map(o => (o.label || '').toLowerCase());
+      let match = null;
+      for (const rule of RULES) {
+        const hit = rule.mode === 'all'
+          ? rule.keys.every(k => lbls.some(l => l.includes(k)))
+          : rule.keys.some(k => lbls.some(l => l.includes(k)));
+        if (hit) { match = rule; break; }
+      }
+      if (match?.keys?.includes('bed')) bedroomCount++;
+      return {
+        label:  match ? match.label : `Room ${idx + 1}`,
+        area:   Math.max(1, Math.round(Math.abs(f.area) / 10000)),
+        color:  match ? match.color : FALLBACK[idx % FALLBACK.length],
+        poly:   f.poly,
+        _abs:   Math.abs(f.area),
+        _isBed: !!match?.keys?.includes('bed'),
+      };
+    });
+
+    // With 2+ bedrooms, largest becomes "Master Bedroom", rest "Bedroom"
+    if (bedroomCount >= 2) {
+      const beds    = classified.filter(r => r._isBed);
+      const largest = beds.reduce((a, b) => a._abs > b._abs ? a : b, beds[0]);
+      beds.forEach(r => {
+        r.label = r === largest ? 'Master Bedroom' : 'Bedroom';
+        r.color = r === largest ? '#e8eaf5' : '#eaeaf5';
+      });
+    }
+
+    return classified.map(({ label, area, color, poly }) => ({ label, area, color, poly }));
+  }
+
   // ─── SpatialLM JSON → floor plan format ─────────────────────────────────────
   // SpatialLM returns coordinates in meters; convert to cm (scale=100)
   function spatialLMToFloorPlan(data) {
     console.log('[FP] SpatialLM raw output:', JSON.stringify(data).slice(0, 500));
     const b   = data.bounds;
-    const S   = 100;        // cm per meter
-    const pad = 60;         // cm padding
+    const S   = 100;
+    const pad = 60;
 
     const tx2 = x => (x - b.min_x) * S + pad;
     const ty2 = y => (y - b.min_y) * S + pad;
+
+    const walls = data.walls.map(w => [
+      [tx2(w.start[0]), ty2(w.start[1])],
+      [tx2(w.end[0]),   ty2(w.end[1])],
+    ]);
+
+    const objects = (data.objects || []).map(o => ({
+      label:  o.class,
+      center: [tx2(o.center[0]), ty2(o.center[1])],
+      rot:    o.rotation,
+      scale:  o.scale ? [o.scale[0] * S, o.scale[1] * S] : [40, 40],
+    }));
+
+    // Prefer rooms from the backend (RoomFormer polygons are precise).
+    // Fall back to local DCEL extraction if the backend didn't return them.
+    let rooms;
+    if (data.rooms && data.rooms.length > 0) {
+      const ROOM_COLORS = {
+        'Living Room':    '#f5f0e8',
+        'Master Bedroom': '#e8eaf5',
+        'Bedroom':        '#eaeaf5',
+        'Bathroom':       '#ddf0ec',
+        'Kitchen':        '#eaf0e8',
+        'Dining Room':    '#f5ede8',
+        'Office':         '#f0ece4',
+      };
+      const FALLBACK_COLORS = ['#f5f0e8','#eaf0e8','#e8eaf5','#ddf0ec','#f5ede8','#eeece8'];
+      rooms = data.rooms.map((r, i) => ({
+        label: r.label,
+        area:  r.area,
+        color: ROOM_COLORS[r.label] || FALLBACK_COLORS[i % FALLBACK_COLORS.length],
+        poly:  r.poly.map(([x, y]) => [tx2(x), ty2(y)]),
+      }));
+      console.log('[FP] Using', rooms.length, 'rooms from RoomFormer:',
+                  rooms.map(r => r.label));
+    } else {
+      rooms = extractRoomsFromWalls(walls, objects);
+      console.log('[FP] RoomFormer returned no rooms; extracted', rooms.length,
+                  'rooms from wall graph:', rooms.map(r => r.label));
+    }
 
     return {
       width:  b.width  * S + pad * 2,
       height: b.height * S + pad * 2,
       scale:  100,
-      rooms:  [],           // SpatialLM doesn't output room polygons
-      walls:  data.walls.map(w => [
-        [tx2(w.start[0]), ty2(w.start[1])],
-        [tx2(w.end[0]),   ty2(w.end[1])],
-      ]),
+      rooms,
+      walls,
       doors: data.doors.map(d => ({
         hinge: [tx2(d.position[0]), ty2(d.position[1])],
         len:   d.width * S,
@@ -313,12 +493,7 @@
         center: [tx2(win.position[0]), ty2(win.position[1])],
         width:  win.width * S,
       })),
-      objects: (data.objects || []).map(o => ({
-        label:  o.class,
-        center: [tx2(o.center[0]), ty2(o.center[1])],
-        rot:    o.rotation,
-        scale:  o.scale ? [o.scale[0] * S, o.scale[1] * S] : [40, 40],
-      })),
+      objects,
     };
   }
 
@@ -328,6 +503,17 @@
     a.download = 'floor-plan.png';
     a.href = canvas.toDataURL('image/png');
     a.click();
+  }
+
+  // Save current plan as floor_plan.json — drop into data/scans/<name>/ for training
+  function exportJSON() {
+    if (!plan) { showToast?.('No floor plan to save'); return; }
+    const blob = new Blob([JSON.stringify(plan, null, 2)], { type: 'application/json' });
+    const a    = document.createElement('a');
+    a.download = 'floor_plan.json';
+    a.href     = URL.createObjectURL(blob);
+    a.click();
+    showToast?.('floor_plan.json saved — move it to data/scans/<scan_name>/ for training');
   }
 
   // ─── Draw ────────────────────────────────────────────────────────────────────
