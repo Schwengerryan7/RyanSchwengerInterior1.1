@@ -83,10 +83,12 @@ def _ensure_model():
         return
 
     # diff_ras is only used by the training loss — stub it out for inference.
-    # Must register submodules too so Python treats it as a package.
+    # Use MagicMock (auto-creates any attribute) with __path__ so Python treats
+    # it as a package and `from diff_ras.polygon import SoftPolygon` succeeds.
+    from unittest.mock import MagicMock
     for mod in ("diff_ras", "diff_ras.polygon", "diff_ras.polygon_rasterize"):
         if mod not in sys.modules:
-            m = types.ModuleType(mod)
+            m = MagicMock()
             m.__path__ = []
             sys.modules[mod] = m
 
