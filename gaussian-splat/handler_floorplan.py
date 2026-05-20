@@ -82,9 +82,13 @@ def _ensure_model():
     if _model is not None:
         return
 
-    # diff_ras is only used by the training loss — stub it out for inference
-    from unittest.mock import MagicMock
-    sys.modules.setdefault("diff_ras", MagicMock())
+    # diff_ras is only used by the training loss — stub it out for inference.
+    # Must register submodules too so Python treats it as a package.
+    for mod in ("diff_ras", "diff_ras.polygon", "diff_ras.polygon_rasterize"):
+        if mod not in sys.modules:
+            m = types.ModuleType(mod)
+            m.__path__ = []
+            sys.modules[mod] = m
 
     # Add vendored detectron2 that ships inside RoomFormer repo
     det2_path = os.path.join(REPO_DIR, "detectron2")
