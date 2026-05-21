@@ -92,6 +92,20 @@ def _ensure_model():
             m.__path__ = []
             sys.modules[mod] = m
 
+    # Compile the deformable attention CUDA extension at first startup.
+    # Done here (runtime) rather than at Docker build time because CI runners
+    # have no GPU. The .so is cached in the worker container for its lifetime.
+    import glob, subprocess
+    ops_dir = os.path.join(REPO_DIR, "models", "ops")
+    if not glob.glob(os.path.join(ops_dir, "MultiScaleDeformableAttention*.so")):
+        print("[FP] Compiling MultiScaleDeformableAttention CUDA extension…")
+        subprocess.run(
+            [sys.executable, "setup.py", "build_ext", "--inplace"],
+            cwd=ops_dir, check=True,
+            env={**os.environ, "TORCH_CUDA_ARCH_LIST": "8.0;8.6;8.9+PTX"},
+        )
+        print("[FP] CUDA extension compiled.")
+
     # Add vendored detectron2 that ships inside RoomFormer repo
     det2_path = os.path.join(REPO_DIR, "detectron2")
     if os.path.isdir(det2_path) and det2_path not in sys.path:

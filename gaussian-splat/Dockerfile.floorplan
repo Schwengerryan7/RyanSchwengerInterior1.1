@@ -32,14 +32,6 @@ RUN git clone --depth 1 https://github.com/ywyue/RoomFormer /workspace/RoomForme
 # (ignore errors — some training-only packages are optional)
 RUN pip install --no-cache-dir -r /workspace/RoomFormer/requirements.txt || true
 
-# Compile RoomFormer's deformable attention CUDA extension.
-# Patch the device-availability check first — CI runners have the CUDA toolkit
-# but no GPU; we compile for explicit arch targets instead.
-WORKDIR /workspace/RoomFormer/models/ops
-RUN sed -i 's/if not torch.cuda.is_available():/if False:  #/' setup.py && \
-    TORCH_CUDA_ARCH_LIST="7.5;8.0;8.6;8.9+PTX" python setup.py build_ext --inplace
-WORKDIR /workspace
-
 # Download Structured3D pretrained checkpoint from ETH polybox
 # The zip contains roomformer_structured3d.pth + roomformer_scenecad.pth
 RUN wget -q -O /tmp/roomformer_ckpts.zip \
