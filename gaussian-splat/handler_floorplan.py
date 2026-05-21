@@ -173,7 +173,7 @@ def _run_roomformer(density_map):
     """Run RoomFormer on a (H, W) float density map.
     Returns a list of polygon arrays, each (N, 2) in pixel coordinates."""
     # Build (3, H, W) float tensor — repeat grayscale as 3-channel image
-    img     = torch.tensor(density_map, dtype=torch.float32).unsqueeze(0).expand(3, -1, -1)
+    img     = torch.tensor(density_map, dtype=torch.float32).unsqueeze(0)  # [1, H, W] — checkpoint uses 1-ch backbone
     samples = [img.to(_device)]   # model wraps list into NestedTensor internally
 
     with torch.no_grad():
