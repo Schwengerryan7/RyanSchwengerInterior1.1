@@ -122,9 +122,11 @@ def _ensure_model():
     args = types.SimpleNamespace(
         # backbone
         backbone            = "resnet50",
+        dilation            = False,
+        lr_backbone         = 0,
+        # transformer
         position_embedding  = "sine",
         num_feature_levels  = 4,
-        # transformer
         hidden_dim          = 256,
         nheads              = 8,
         enc_layers          = 6,
@@ -138,7 +140,13 @@ def _ensure_model():
         num_polys           = 20,
         query_pos_type      = "sine",
         with_poly_refine    = True,
-        semantic_classes    = -1,   # -1 = no semantic prediction
+        masked_attn         = False,
+        semantic_classes    = -1,
+        # loss coefficients (build_model reads these even at inference)
+        cls_loss_coef       = 1.0,
+        room_cls_loss_coef  = 1.0,
+        coords_loss_coef    = 5.0,
+        raster_loss_coef    = 1.0,
         # misc flags
         masks               = False,
         aux_loss            = False,
@@ -146,7 +154,6 @@ def _ensure_model():
         pre_norm            = False,
         with_grad_checkpoint= False,
         device              = "cuda" if torch.cuda.is_available() else "cpu",
-        lr_backbone         = 0,
     )
 
     _device = torch.device(args.device)
