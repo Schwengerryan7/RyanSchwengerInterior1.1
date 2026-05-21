@@ -173,7 +173,7 @@ def _run_roomformer(density_map):
     """Run RoomFormer on a (H, W) float density map.
     Returns a list of polygon arrays, each (N, 2) in pixel coordinates."""
     # Build (3, H, W) float tensor — repeat grayscale as 3-channel image
-    img     = torch.from_numpy(density_map).float().unsqueeze(0).expand(3, -1, -1)
+    img     = torch.tensor(density_map, dtype=torch.float32).unsqueeze(0).expand(3, -1, -1)
     samples = [img.to(_device)]   # model wraps list into NestedTensor internally
 
     with torch.no_grad():
@@ -189,7 +189,7 @@ def _run_roomformer(density_map):
         fg = torch.sigmoid(room_logits.squeeze(-1)) > 0.5   # (num_q,)
         if fg.sum() < 3:
             continue
-        corners = (room_coords[fg] * (DENSITY_SIZE - 1)).cpu().numpy()
+        corners = np.array((room_coords[fg] * (DENSITY_SIZE - 1)).cpu().tolist(), dtype=np.float32)
         corners = np.around(corners).astype(np.int32)        # (N, 2) pixel coords
         # Filter tiny rooms (< 100 px²)
         if len(corners) >= 4:
