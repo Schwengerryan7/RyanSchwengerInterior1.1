@@ -158,7 +158,7 @@ def _ensure_model():
 
     _device = torch.device(args.device)
     print("[FP] Building RoomFormer model…")
-    model, _ = build_model(args, train=False)
+    model = build_model(args, train=False)
 
     ckpt = torch.load(CKPT_PATH, map_location="cpu")
     model.load_state_dict(ckpt["model"], strict=False)
