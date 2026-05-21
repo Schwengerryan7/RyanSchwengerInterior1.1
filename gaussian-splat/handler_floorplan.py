@@ -106,6 +106,11 @@ def _ensure_model():
         )
         print("[FP] CUDA extension compiled.")
 
+    # models/ops must be on sys.path so the compiled .so is importable
+    ops_dir = os.path.join(REPO_DIR, "models", "ops")
+    if ops_dir not in sys.path:
+        sys.path.insert(0, ops_dir)
+
     # Add vendored detectron2 that ships inside RoomFormer repo
     det2_path = os.path.join(REPO_DIR, "detectron2")
     if os.path.isdir(det2_path) and det2_path not in sys.path:
