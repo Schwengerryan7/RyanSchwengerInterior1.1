@@ -146,6 +146,7 @@ def _ensure_model():
         pre_norm            = False,
         with_grad_checkpoint= False,
         device              = "cuda" if torch.cuda.is_available() else "cpu",
+        lr_backbone         = 0,
     )
 
     _device = torch.device(args.device)
