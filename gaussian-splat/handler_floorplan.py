@@ -208,7 +208,8 @@ def _run_roomformer(edge_map):
         if len(corners) >= 4:
             from shapely.geometry import Polygon as ShapePoly
             area = ShapePoly(corners).area
-            if area >= 100:
+            # Require at least 0.5% of map area to filter noise
+            if area >= DENSITY_SIZE * DENSITY_SIZE * 0.005:
                 polys.append(corners)
 
     return polys
@@ -261,8 +262,8 @@ def _compute_bounds(walls, min_xy, range_xy):
 
 
 def _outline_to_walls(raw_density, min_xy, range_xy, room_height):
-    """Extract the actual room shape from the density blob using OpenCV contours.
-    This gives a real polygon outline instead of the bounding-box fallback."""
+    """Extract room shapes from the density blob using OpenCV contours.
+    Processes ALL significant contours so multi-room scans render correctly."""
     try:
         import cv2
     except ImportError:
@@ -270,11 +271,9 @@ def _outline_to_walls(raw_density, min_xy, range_xy, room_height):
 
     size = DENSITY_SIZE
     occupied = (raw_density > 0.05).astype(np.uint8) * 255
-
-    # Fill small holes, then find the largest outer contour
     occupied = binary_fill_holes(occupied > 0).astype(np.uint8) * 255
 
-    # Slight morphological closing to connect nearby blobs
+    # Morphological closing to connect nearby blobs within ~1 pixel gap
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
     occupied = cv2.morphologyEx(occupied, cv2.MORPH_CLOSE, kernel)
 
@@ -282,39 +281,40 @@ def _outline_to_walls(raw_density, min_xy, range_xy, room_height):
     if not contours:
         return None
 
-    # Largest contour = room boundary
-    contour = max(contours, key=cv2.contourArea)
-    area_px  = cv2.contourArea(contour)
-    if area_px < 200:
-        return None
+    # Keep all contours above 1% of total map area (filters noise specks)
+    min_area = size * size * 0.01
+    significant = [c for c in contours if cv2.contourArea(c) >= min_area]
+    if not significant:
+        # Fall back to just the largest
+        significant = [max(contours, key=cv2.contourArea)]
 
-    # Simplify polygon: epsilon = 1.5% of perimeter
-    peri = cv2.arcLength(contour, True)
-    approx = cv2.approxPolyDP(contour, 0.015 * peri, True)
-    pts = approx.squeeze()
-    if pts.ndim != 2 or len(pts) < 3:
-        return None
+    print(f"[FP] Outline fallback: {len(significant)} region(s) from contour extraction")
 
-    print(f"[FP] Outline fallback: {len(pts)}-vertex polygon from contour")
-
-    # Convert pixel coords → world coords and emit walls
-    s   = float(size - 1)
+    s    = float(size - 1)
     walls = []
-    for i in range(len(pts)):
-        p1 = pts[i]
-        p2 = pts[(i + 1) % len(pts)]
-        sx = float(p1[0]) / s * range_xy + float(min_xy[0])
-        sy = float(p1[1]) / s * range_xy + float(min_xy[1])
-        ex = float(p2[0]) / s * range_xy + float(min_xy[0])
-        ey = float(p2[1]) / s * range_xy + float(min_xy[1])
-        if math.hypot(ex - sx, ey - sy) < 0.05:
+    wid  = 0
+    for contour in significant:
+        peri   = cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, 0.015 * peri, True)
+        pts    = approx.squeeze()
+        if pts.ndim != 2 or len(pts) < 3:
             continue
-        walls.append({
-            "id":     f"wall_{i}",
-            "start":  [sx, sy],
-            "end":    [ex, ey],
-            "height": float(room_height),
-        })
+        for i in range(len(pts)):
+            p1 = pts[i]
+            p2 = pts[(i + 1) % len(pts)]
+            sx = float(p1[0]) / s * range_xy + float(min_xy[0])
+            sy = float(p1[1]) / s * range_xy + float(min_xy[1])
+            ex = float(p2[0]) / s * range_xy + float(min_xy[0])
+            ey = float(p2[1]) / s * range_xy + float(min_xy[1])
+            if math.hypot(ex - sx, ey - sy) < 0.05:
+                continue
+            walls.append({
+                "id":     f"wall_{wid}",
+                "start":  [sx, sy],
+                "end":    [ex, ey],
+                "height": float(room_height),
+            })
+            wid += 1
     return walls if walls else None
 
 
