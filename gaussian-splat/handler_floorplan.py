@@ -13,6 +13,7 @@ import runpod, os, sys, base64, tempfile, math, types, requests
 import numpy as np
 from plyfile import PlyData
 import torch
+from scipy.ndimage import gaussian_filter, sobel, binary_fill_holes, binary_erosion
 
 REPO_DIR     = "/workspace/RoomFormer"
 CKPT_PATH    = "/workspace/roomformer_stru3d.pth"
@@ -50,17 +51,25 @@ def _orient_z_up(xyz):
 
 
 def _filter_wall_band(xyz):
-    """Keep points between 10–85 % of room height — removes floor and ceiling,
-    leaving wall surfaces prominent in the top-down projection."""
+    """Keep points between 20–70 % of room height — a tighter midpoint band
+    that captures wall surfaces while avoiding floor/ceiling clutter."""
     z  = xyz[:, 2]
-    lo = np.percentile(z, 10)
-    hi = np.percentile(z, 85)
-    return xyz[(z >= lo) & (z <= hi)]
+    lo = np.percentile(z, 20)
+    hi = np.percentile(z, 70)
+    band = xyz[(z >= lo) & (z <= hi)]
+    if len(band) < 100:
+        # Widen band if too few points survive
+        lo = np.percentile(z, 5)
+        hi = np.percentile(z, 95)
+        band = xyz[(z >= lo) & (z <= hi)]
+    return band
 
 
 def _make_density_map(xyz, size=DENSITY_SIZE):
     """Project XY to a top-down log-density image in [0, 1].
-    Returns (density, min_xy, range_xy) for coordinate back-conversion."""
+    Returns (raw_density, edge_map, min_xy, range_xy).
+    edge_map = Sobel-enhanced version for RoomFormer (wall outlines).
+    raw_density = filled blob for fallback outline extraction."""
     xy       = xyz[:, :2]
     min_xy   = xy.min(axis=0)
     range_xy = float((xy.max(axis=0) - min_xy).max())
@@ -68,11 +77,19 @@ def _make_density_map(xyz, size=DENSITY_SIZE):
     xi = np.clip(((xy[:, 0] - min_xy[0]) / (range_xy + 1e-6) * (size - 1)).astype(np.int32), 0, size - 1)
     yi = np.clip(((xy[:, 1] - min_xy[1]) / (range_xy + 1e-6) * (size - 1)).astype(np.int32), 0, size - 1)
 
-    density = np.zeros((size, size), dtype=np.float32)
-    np.add.at(density, (yi, xi), 1.0)
-    density = np.log1p(density)
-    density /= (density.max() + 1e-6)
-    return density, min_xy, range_xy
+    raw = np.zeros((size, size), dtype=np.float32)
+    np.add.at(raw, (yi, xi), 1.0)
+    raw = np.log1p(raw)
+    raw /= (raw.max() + 1e-6)
+
+    # Sobel edge detection: turns a filled room blob into wall outlines
+    smoothed = gaussian_filter(raw, sigma=2.0)
+    sx = sobel(smoothed, axis=0)
+    sy = sobel(smoothed, axis=1)
+    edges = np.hypot(sx, sy)
+    edges /= (edges.max() + 1e-6)
+
+    return raw, edges, min_xy, range_xy
 
 
 # ── model loading ─────────────────────────────────────────────────────────────
@@ -169,29 +186,25 @@ def _ensure_model():
 
 # ── inference ─────────────────────────────────────────────────────────────────
 
-def _run_roomformer(density_map):
-    """Run RoomFormer on a (H, W) float density map.
+def _run_roomformer(edge_map):
+    """Run RoomFormer on a (H, W) Sobel edge map.
     Returns a list of polygon arrays, each (N, 2) in pixel coordinates."""
-    # Build (3, H, W) float tensor — repeat grayscale as 3-channel image
-    img     = torch.tensor(density_map, dtype=torch.float32).unsqueeze(0)  # [1, H, W] — checkpoint uses 1-ch backbone
-    samples = [img.to(_device)]   # model wraps list into NestedTensor internally
+    img     = torch.tensor(edge_map, dtype=torch.float32).unsqueeze(0)  # [1, H, W]
+    samples = [img.to(_device)]
 
     with torch.no_grad():
         outputs = _model(samples)
 
-    # outputs['pred_logits']:  (1, num_polys, num_q, 1)
-    # outputs['pred_coords']:  (1, num_polys, num_q, 2)  — values in [0, 1]
     pred_logits = outputs["pred_logits"][0]   # (num_polys, num_q, 1)
     pred_coords = outputs["pred_coords"][0]   # (num_polys, num_q, 2)
 
     polys = []
     for room_logits, room_coords in zip(pred_logits, pred_coords):
-        fg = torch.sigmoid(room_logits.squeeze(-1)) > 0.5   # (num_q,)
+        fg = torch.sigmoid(room_logits.squeeze(-1)) > 0.5
         if fg.sum() < 3:
             continue
         corners = np.array((room_coords[fg] * (DENSITY_SIZE - 1)).cpu().tolist(), dtype=np.float32)
-        corners = np.around(corners).astype(np.int32)        # (N, 2) pixel coords
-        # Filter tiny rooms (< 100 px²)
+        corners = np.around(corners).astype(np.int32)
         if len(corners) >= 4:
             from shapely.geometry import Polygon as ShapePoly
             area = ShapePoly(corners).area
@@ -216,7 +229,7 @@ def _polys_to_walls(polys, min_xy, range_xy, room_height):
             sy = float(p1[1]) / size * range_xy + float(min_xy[1])
             ex = float(p2[0]) / size * range_xy + float(min_xy[0])
             ey = float(p2[1]) / size * range_xy + float(min_xy[1])
-            if math.hypot(ex - sx, ey - sy) < 0.05:   # skip < 5 cm stubs
+            if math.hypot(ex - sx, ey - sy) < 0.05:
                 continue
             walls.append({
                 "id":     f"wall_{wid}",
@@ -238,7 +251,6 @@ def _compute_bounds(walls, min_xy, range_xy):
             "width": max(all_x) - min(all_x),
             "height": max(all_y) - min(all_y),
         }
-    # Fallback bounds from point cloud extent
     mx = float(min_xy[0]) + range_xy
     my = float(min_xy[1]) + range_xy
     return {
@@ -246,6 +258,64 @@ def _compute_bounds(walls, min_xy, range_xy):
         "max_x": mx, "max_y": my,
         "width": range_xy, "height": range_xy,
     }
+
+
+def _outline_to_walls(raw_density, min_xy, range_xy, room_height):
+    """Extract the actual room shape from the density blob using OpenCV contours.
+    This gives a real polygon outline instead of the bounding-box fallback."""
+    try:
+        import cv2
+    except ImportError:
+        return None
+
+    size = DENSITY_SIZE
+    occupied = (raw_density > 0.05).astype(np.uint8) * 255
+
+    # Fill small holes, then find the largest outer contour
+    occupied = binary_fill_holes(occupied > 0).astype(np.uint8) * 255
+
+    # Slight morphological closing to connect nearby blobs
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+    occupied = cv2.morphologyEx(occupied, cv2.MORPH_CLOSE, kernel)
+
+    contours, _ = cv2.findContours(occupied, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+
+    # Largest contour = room boundary
+    contour = max(contours, key=cv2.contourArea)
+    area_px  = cv2.contourArea(contour)
+    if area_px < 200:
+        return None
+
+    # Simplify polygon: epsilon = 1.5% of perimeter
+    peri = cv2.arcLength(contour, True)
+    approx = cv2.approxPolyDP(contour, 0.015 * peri, True)
+    pts = approx.squeeze()
+    if pts.ndim != 2 or len(pts) < 3:
+        return None
+
+    print(f"[FP] Outline fallback: {len(pts)}-vertex polygon from contour")
+
+    # Convert pixel coords → world coords and emit walls
+    s   = float(size - 1)
+    walls = []
+    for i in range(len(pts)):
+        p1 = pts[i]
+        p2 = pts[(i + 1) % len(pts)]
+        sx = float(p1[0]) / s * range_xy + float(min_xy[0])
+        sy = float(p1[1]) / s * range_xy + float(min_xy[1])
+        ex = float(p2[0]) / s * range_xy + float(min_xy[0])
+        ey = float(p2[1]) / s * range_xy + float(min_xy[1])
+        if math.hypot(ex - sx, ey - sy) < 0.05:
+            continue
+        walls.append({
+            "id":     f"wall_{i}",
+            "start":  [sx, sy],
+            "end":    [ex, ey],
+            "height": float(room_height),
+        })
+    return walls if walls else None
 
 
 def _bounding_box_walls(min_xy, range_xy, room_height):
@@ -289,21 +359,28 @@ def handler(job):
 
         # Room height (clip to plausible range)
         room_height = float(np.clip(xyz[:, 2].max() - xyz[:, 2].min(), 2.0, 4.0))
+        print(f"[FP] room_height={room_height:.2f}m  total_z_span={xyz[:,2].max()-xyz[:,2].min():.2f}")
 
-        # Filter to wall-height band for a cleaner density map
+        # Tighter wall band (20–70% of Z) for cleaner mid-height cross-section
         xyz_walls = _filter_wall_band(xyz)
         print(f"[FP] {len(xyz_walls):,} points in wall band")
 
-        density_map, min_xy, range_xy = _make_density_map(xyz_walls)
-        print("[FP] Density map ready — running RoomFormer…")
+        raw_density, edge_map, min_xy, range_xy = _make_density_map(xyz_walls)
+        print(f"[FP] Density map: {(raw_density > 0.05).sum()} occupied px, "
+              f"range_xy={range_xy:.2f}m")
+        print("[FP] Running RoomFormer on edge-enhanced map…")
 
-        polys = _run_roomformer(density_map)
+        polys = _run_roomformer(edge_map)
         print(f"[FP] {len(polys)} room polygon(s) found")
 
         walls = _polys_to_walls(polys, min_xy, range_xy, room_height)
 
         if not walls:
-            print("[FP] No walls from RoomFormer — using bounding-box fallback")
+            print("[FP] RoomFormer found no walls — trying contour outline fallback…")
+            walls = _outline_to_walls(raw_density, min_xy, range_xy, room_height)
+
+        if not walls:
+            print("[FP] Contour fallback failed — using bounding-box fallback")
             walls = _bounding_box_walls(min_xy, range_xy, room_height)
 
         bounds = _compute_bounds(walls, min_xy, range_xy)
