@@ -46,6 +46,41 @@
   let viewMode = '2d';       // '2d' | '3d'
   let three = null;          // Three.js state
 
+  // ── Edit mode state ───────────────────────────────────────────────────────────
+  let editMode = false;
+  let selectedIdx = -1;   // index into plan.objects, -1 = none
+  let dragState = null;   // null or {type:'move'|'resize', edge, startPX, startPY, origCenter, origScale}
+
+  // Convert canvas pixel coords → plan coords
+  function canvasToPlan(cx, cy) {
+    return [(cx - tx) / tscale, (cy - ty) / tscale];
+  }
+
+  // Hit-test: which object index is at plan coords (planX, planY)?
+  function hitTestObjects(planX, planY) {
+    if (!plan?.objects) return -1;
+    for (let i = plan.objects.length - 1; i >= 0; i--) {
+      const o = plan.objects[i];
+      const [cx, cy] = o.center;
+      const [sw, sh] = o.scale || [40, 40];
+      if (planX >= cx-sw/2-10 && planX <= cx+sw/2+10 &&
+          planY >= cy-sh/2-10 && planY <= cy+sh/2+10) return i;
+    }
+    return -1;
+  }
+
+  // Which resize edge is the cursor near (or null for move)?
+  function getResizeEdge(planX, planY, o) {
+    const [cx, cy] = o.center;
+    const [sw, sh] = o.scale || [40, 40];
+    const t = 12;
+    if (Math.abs(planX-(cx+sw/2)) < t && planY > cy-sh/2 && planY < cy+sh/2) return 'right';
+    if (Math.abs(planX-(cx-sw/2)) < t && planY > cy-sh/2 && planY < cy+sh/2) return 'left';
+    if (Math.abs(planY-(cy+sh/2)) < t && planX > cx-sw/2 && planX < cx+sw/2) return 'bottom';
+    if (Math.abs(planY-(cy-sh/2)) < t && planX > cx-sw/2 && planX < cx+sw/2) return 'top';
+    return null;
+  }
+
   function init() {
     canvas = document.getElementById('fp-canvas');
     if (!canvas) return;
@@ -66,11 +101,33 @@
       () => zoomAt(canvas.width / 2, canvas.height / 2, 1.25));
     document.getElementById('fp-zoom-out')?.addEventListener('click',
       () => zoomAt(canvas.width / 2, canvas.height / 2, 0.8));
+    document.getElementById('fp-load-latest')?.addEventListener('click', loadLatest);
     document.getElementById('fp-export-png')?.addEventListener('click', exportPNG);
     document.getElementById('fp-export-json')?.addEventListener('click', exportJSON);
     document.getElementById('fp-generate')?.addEventListener('click', onGenerate);
     document.getElementById('fp-mode-2d')?.addEventListener('click', () => setViewMode('2d'));
     document.getElementById('fp-mode-3d')?.addEventListener('click', () => setViewMode('3d'));
+
+    document.getElementById('fp-edit')?.addEventListener('click', () => setEditMode(!editMode));
+    document.getElementById('fp-edit-delete')?.addEventListener('click', () => {
+      if (selectedIdx >= 0 && plan?.objects) {
+        plan.objects.splice(selectedIdx, 1);
+        selectedIdx = -1;
+        draw();
+      }
+    });
+    document.getElementById('fp-edit-save')?.addEventListener('click', saveEdits);
+
+    document.addEventListener('keydown', e => {
+      if (!editMode || selectedIdx < 0) return;
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (document.activeElement === document.body || document.activeElement === canvas) {
+          plan.objects.splice(selectedIdx, 1);
+          selectedIdx = -1; draw();
+        }
+      }
+      if (e.key === 'Escape') { selectedIdx = -1; draw(); }
+    });
 
     loadPlan(DEMO);
   }
@@ -129,17 +186,55 @@
   }
 
   function onMouseDown(e) {
+    if (editMode) {
+      const r = canvas.getBoundingClientRect();
+      const [planX, planY] = canvasToPlan(e.clientX - r.left, e.clientY - r.top);
+      const hitIdx = hitTestObjects(planX, planY);
+      if (hitIdx >= 0) {
+        selectedIdx = hitIdx;
+        const o = plan.objects[hitIdx];
+        const edge = getResizeEdge(planX, planY, o);
+        dragState = { type: edge ? 'resize' : 'move', edge,
+                      startPX: planX, startPY: planY,
+                      origCenter: [...o.center], origScale: [...(o.scale||[40,40])] };
+        draw();
+        return;
+      }
+      selectedIdx = -1; draw(); return;
+    }
     panning = true;
     panStart = [e.clientX - tx, e.clientY - ty];
     canvas.style.cursor = 'grabbing';
   }
   function onMouseMove(e) {
+    if (editMode && dragState && selectedIdx >= 0) {
+      const r = canvas.getBoundingClientRect();
+      const [planX, planY] = canvasToPlan(e.clientX - r.left, e.clientY - r.top);
+      const dx = planX - dragState.startPX, dy = planY - dragState.startPY;
+      const o = plan.objects[selectedIdx];
+      if (dragState.type === 'move') {
+        o.center = [dragState.origCenter[0]+dx, dragState.origCenter[1]+dy];
+      } else {
+        const [ow, oh] = dragState.origScale;
+        const edge = dragState.edge;
+        if (edge==='right')  { o.scale=[Math.max(20,ow+dx), oh]; }
+        if (edge==='left')   { o.scale=[Math.max(20,ow-dx), oh]; o.center[0]=dragState.origCenter[0]+dx/2; }
+        if (edge==='bottom') { o.scale=[ow, Math.max(20,oh+dy)]; }
+        if (edge==='top')    { o.scale=[ow, Math.max(20,oh-dy)]; o.center[1]=dragState.origCenter[1]+dy/2; }
+      }
+      draw(); return;
+    }
     if (!panning) return;
     tx = e.clientX - panStart[0];
     ty = e.clientY - panStart[1];
     draw();
   }
-  function onMouseUp() { panning = false; canvas.style.cursor = 'grab'; }
+  function onMouseUp() {
+    dragState = null;
+    if (editMode) return;
+    panning = false;
+    canvas.style.cursor = 'grab';
+  }
 
   // ─── Drop handler ────────────────────────────────────────────────────────────
   function onDrop(e) {
@@ -150,8 +245,14 @@
     if (file.name.endsWith('.json')) {
       const reader = new FileReader();
       reader.onload = ev => {
-        try { loadPlan(JSON.parse(ev.target.result)); }
-        catch { showToast?.('Invalid floor plan JSON'); }
+        try {
+          const parsed = JSON.parse(ev.target.result);
+          // Raw backend JSON has `bounds` + `walls` as objects with start/end.
+          // Converted plan JSON has `width` at the top level.
+          const data = parsed.bounds ? spatialLMToFloorPlan(parsed) : parsed;
+          loadPlan(data);
+        }
+        catch (e) { console.error(e); showToast?.('Invalid floor plan JSON'); }
       };
       reader.readAsText(file);
 
@@ -276,7 +377,7 @@
     ctx.font = '500 14px "DM Sans", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText('Extracting floor plan with SpatialLM…', cx, cy + 2);
+    ctx.fillText('Generating floor plan…', cx, cy + 2);
 
     if (elapsed) {
       ctx.fillStyle = '#8a877f';
@@ -428,15 +529,19 @@
   }
 
   // ─── SpatialLM JSON → floor plan format ─────────────────────────────────────
-  // SpatialLM returns coordinates in meters; convert to cm (scale=100)
   function spatialLMToFloorPlan(data) {
     console.log('[FP] SpatialLM raw output:', JSON.stringify(data).slice(0, 500));
     const b   = data.bounds;
     const S   = 100;
     const pad = 60;
 
-    const tx2 = x => (x - b.min_x) * S + pad;
-    const ty2 = y => (y - b.min_y) * S + pad;
+    // COLMAP produces arbitrary-scale coordinates. Normalize so the largest
+    // room dimension is ≤ 12 m, which keeps 3D rendering sane.
+    const rawMax   = Math.max(b.width, b.height);
+    const norm     = rawMax > 12 ? 12 / rawMax : 1;   // scale factor (1 if already metric)
+
+    const tx2 = x => (x - b.min_x) * norm * S + pad;
+    const ty2 = y => (y - b.min_y) * norm * S + pad;
 
     const walls = data.walls.map(w => [
       [tx2(w.start[0]), ty2(w.start[1])],
@@ -479,22 +584,45 @@
     }
 
     return {
-      width:  b.width  * S + pad * 2,
-      height: b.height * S + pad * 2,
+      width:  b.width  * norm * S + pad * 2,
+      height: b.height * norm * S + pad * 2,
       scale:  100,
       rooms,
       walls,
-      doors: data.doors.map(d => ({
-        hinge: [tx2(d.position[0]), ty2(d.position[1])],
-        len:   d.width * S,
-        dir:   d.wall_dir,
-      })),
+      doors: (data.doors || []).map(d => {
+        const wda = d.wall_dir || 0;
+        const halfW = (d.width * S) / 2;
+        // Shift from center to hinge (left side along wall direction)
+        const hx = tx2(d.position[0]) - Math.cos(wda) * halfW;
+        const hy = ty2(d.position[1]) - Math.sin(wda) * halfW;
+        return {
+          hinge: [hx, hy],
+          len:   d.width * S,
+          dir:   wda + Math.PI / 2,   // swing perpendicular to wall into room
+        };
+      }),
       windows: (data.windows || []).map(win => ({
         center: [tx2(win.position[0]), ty2(win.position[1])],
         width:  win.width * S,
       })),
       objects,
     };
+  }
+
+  // ─── Load latest saved floor plan from proxy ─────────────────────────────────
+  async function loadLatest() {
+    try {
+      showToast?.('Loading latest floor plan…');
+      const res  = await fetch('/floorplan/latest');
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      const data = await res.json();
+      const fp   = data.bounds ? spatialLMToFloorPlan(data) : data;
+      loadPlan(fp);
+      showToast?.('Floor plan loaded');
+    } catch (e) {
+      console.error('[FP] loadLatest error:', e);
+      showToast?.('Could not load floor plan: ' + e.message);
+    }
   }
 
   // ─── Export ──────────────────────────────────────────────────────────────────
@@ -562,10 +690,22 @@
   }
 
   function drawWalls() {
-    ctx.strokeStyle = '#2a2825';
+    // Two-pass: outer glow for depth, then solid dark face
     ctx.lineCap = 'square';
     ctx.lineJoin = 'miter';
-    ctx.lineWidth = 7;
+    ctx.miterLimit = 10;
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+    ctx.lineWidth = 16;
+    (plan.walls || []).forEach(w => {
+      ctx.beginPath();
+      ctx.moveTo(w[0][0], w[0][1]);
+      ctx.lineTo(w[1][0], w[1][1]);
+      ctx.stroke();
+    });
+
+    ctx.strokeStyle = '#1a1815';
+    ctx.lineWidth = 12;
     (plan.walls || []).forEach(w => {
       ctx.beginPath();
       ctx.moveTo(w[0][0], w[0][1]);
@@ -592,26 +732,37 @@
   }
 
   function drawDoors() {
-    ctx.strokeStyle = '#2a2825';
-    ctx.lineWidth = 1.5;
-
     (plan.doors || []).forEach(d => {
       const [hx, hy] = d.hinge;
       const ex = hx + Math.cos(d.dir) * d.len;
       const ey = hy + Math.sin(d.dir) * d.len;
 
-      // Door leaf (open position)
+      ctx.strokeStyle = '#2a2825';
+      ctx.lineWidth = 1.5;
+
+      // Door leaf
       ctx.beginPath();
       ctx.moveTo(hx, hy);
       ctx.lineTo(ex, ey);
       ctx.stroke();
 
       // Swing arc
+      ctx.setLineDash([3, 3]);
       ctx.beginPath();
       ctx.arc(hx, hy, d.len, d.dir - Math.PI / 2, d.dir, false);
-      ctx.setLineDash([3, 3]);
       ctx.stroke();
       ctx.setLineDash([]);
+
+      // Label at midpoint of arc
+      const labelAngle = d.dir - Math.PI / 4;
+      const labelR = d.len * 0.55;
+      const lx = hx + Math.cos(labelAngle) * labelR;
+      const ly = hy + Math.sin(labelAngle) * labelR;
+      ctx.fillStyle = '#5a5750';
+      ctx.font = '8px "DM Sans", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Door', lx, ly);
     });
   }
 
@@ -623,7 +774,6 @@
       const label = (o.label || '').toLowerCase();
       const key   = Object.keys(OBJ_TYPES).find(k => label.includes(k));
       const type  = OBJ_TYPES[key];
-      const isCylinder = type?.shape === 'cylinder';
 
       ctx.save();
       ctx.translate(cx, cy);
@@ -631,24 +781,140 @@
 
       ctx.strokeStyle = '#8a877f';
       ctx.lineWidth = 1;
-      ctx.fillStyle = 'rgba(200,195,185,0.3)';
-      ctx.beginPath();
-      if (isCylinder) {
-        ctx.arc(0, 0, Math.min(hw, hh), 0, Math.PI * 2);
-      } else {
-        ctx.rect(-hw, -hh, sw, sh);
-      }
-      ctx.fill();
-      ctx.stroke();
 
-      ctx.fillStyle = '#8a877f';
-      ctx.font = '9px "DM Sans", sans-serif';
+      if (type?.shape === 'cylinder' || label.includes('plant') || label.includes('lamp') || label.includes('stool')) {
+        // Circular footprint
+        ctx.fillStyle = 'rgba(180,200,170,0.35)';
+        ctx.beginPath();
+        ctx.arc(0, 0, Math.min(hw, hh), 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+
+      } else if (label.includes('sofa') || label.includes('couch') || label.includes('sectional')) {
+        // Sofa: body + back cushion bar
+        ctx.fillStyle = 'rgba(180,160,130,0.45)';
+        ctx.strokeStyle = '#7a6a58';
+        ctx.beginPath(); ctx.rect(-hw, -hh, sw, sh); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = 'rgba(140,120,95,0.6)';
+        ctx.fillRect(-hw, hh - sh * 0.28, sw, sh * 0.28);
+        // Seat cushion dividers
+        ctx.strokeStyle = 'rgba(120,100,80,0.5)';
+        const cushions = Math.max(2, Math.round(sw / 60));
+        for (let i = 1; i < cushions; i++) {
+          const x = -hw + (sw / cushions) * i;
+          ctx.beginPath(); ctx.moveTo(x, -hh); ctx.lineTo(x, hh - sh * 0.28); ctx.stroke();
+        }
+
+      } else if (label.includes('bed')) {
+        // Bed: mattress + headboard + pillows
+        ctx.fillStyle = 'rgba(200,190,210,0.45)';
+        ctx.strokeStyle = '#7a7090';
+        ctx.beginPath(); ctx.rect(-hw, -hh, sw, sh); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = 'rgba(160,145,180,0.7)';
+        ctx.fillRect(-hw, -hh, sw, sh * 0.18);
+        // Pillows
+        const pw = Math.min(sw * 0.38, 50), ph = sh * 0.12;
+        ctx.fillStyle = 'rgba(240,235,245,0.8)';
+        ctx.strokeStyle = '#a090b0';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.roundRect?.(-pw - 4, -hh + sh * 0.22, pw, ph, 3) || ctx.rect(-pw - 4, -hh + sh * 0.22, pw, ph);
+        ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.roundRect?.(4, -hh + sh * 0.22, pw, ph, 3) || ctx.rect(4, -hh + sh * 0.22, pw, ph);
+        ctx.fill(); ctx.stroke();
+
+      } else if (label.includes('desk') || label.includes('table')) {
+        // Table/desk: rectangle with subtle grain
+        ctx.fillStyle = 'rgba(210,185,145,0.45)';
+        ctx.strokeStyle = '#8a7050';
+        ctx.beginPath(); ctx.rect(-hw, -hh, sw, sh); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = 'rgba(140,110,70,0.3)'; ctx.lineWidth = 0.5;
+        ctx.beginPath(); ctx.moveTo(-hw + 4, 0); ctx.lineTo(hw - 4, 0); ctx.stroke();
+
+      } else if (label.includes('toilet')) {
+        // Toilet: tank rectangle + bowl oval
+        ctx.fillStyle = 'rgba(230,235,240,0.7)';
+        ctx.strokeStyle = '#8090a0';
+        ctx.beginPath(); ctx.rect(-hw, -hh, sw, sh * 0.35); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(0, hh - sh * 0.35, hw * 0.85, sh * 0.38, 0, 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+
+      } else if (label.includes('bathtub') || label.includes('bath')) {
+        ctx.fillStyle = 'rgba(210,225,235,0.5)';
+        ctx.strokeStyle = '#7090a0';
+        ctx.beginPath(); ctx.rect(-hw, -hh, sw, sh); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(0, sh * 0.08, hw * 0.72, hh * 0.65, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(100,140,170,0.5)'; ctx.stroke();
+
+      } else if (label.includes('tv') || label.includes('television')) {
+        // TV: thin panel
+        ctx.fillStyle = 'rgba(40,40,50,0.7)';
+        ctx.strokeStyle = '#303038';
+        ctx.beginPath(); ctx.rect(-hw, -hh, sw, sh); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = 'rgba(200,200,220,0.3)';
+        ctx.beginPath(); ctx.rect(-hw + 3, -hh + 3, sw - 6, sh - 6); ctx.stroke();
+
+      } else {
+        // Generic furniture box
+        ctx.fillStyle = 'rgba(200,195,185,0.3)';
+        ctx.beginPath(); ctx.rect(-hw, -hh, sw, sh); ctx.fill(); ctx.stroke();
+      }
+
+      // Label
+      ctx.fillStyle = '#5a5750';
+      ctx.font = `${Math.max(8, Math.min(11, sw * 0.1))}px "DM Sans", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.restore();
+
+      // Draw label unrotated so it's always readable
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.fillStyle = '#5a5750';
+      ctx.font = `${Math.max(7, Math.min(10, sw * 0.09))}px "DM Sans", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(o.label || '', 0, 0);
-
       ctx.restore();
     });
+
+    // Draw selection handles on top of all objects (in translated space)
+    if (editMode && selectedIdx >= 0 && plan.objects[selectedIdx]) {
+      drawEditHandles(plan.objects[selectedIdx]);
+    }
+  }
+
+  // Draw dashed selection border + resize handles for the selected object
+  function drawEditHandles(o) {
+    const [cx, cy] = o.center;
+    const [sw, sh] = o.scale || [40, 40];
+    const hw = sw / 2, hh = sh / 2;
+
+    // Dashed selection border
+    ctx.save();
+    ctx.strokeStyle = '#4a90e2';
+    ctx.lineWidth = 1.5 / tscale;
+    ctx.setLineDash([5 / tscale, 3 / tscale]);
+    ctx.strokeRect(cx - hw, cy - hh, sw, sh);
+    ctx.setLineDash([]);
+
+    // 8px square handles at corners + edge midpoints (in plan space)
+    const hSize = 8 / tscale;
+    const handlePoints = [
+      [cx - hw, cy - hh], [cx, cy - hh], [cx + hw, cy - hh],
+      [cx - hw, cy],                      [cx + hw, cy],
+      [cx - hw, cy + hh], [cx, cy + hh], [cx + hw, cy + hh],
+    ];
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#4a90e2';
+    ctx.lineWidth = 1.5 / tscale;
+    for (const [hx, hy] of handlePoints) {
+      ctx.fillRect(hx - hSize/2, hy - hSize/2, hSize, hSize);
+      ctx.strokeRect(hx - hSize/2, hy - hSize/2, hSize, hSize);
+    }
+    ctx.restore();
+
+    // Update the edit bar label
+    const labelEl = document.getElementById('fp-edit-label');
+    if (labelEl) labelEl.textContent = o.label || o.class || 'Object';
   }
 
   function drawLabels() {
@@ -676,18 +942,18 @@
   }
 
   function drawDimensions() {
-    const dim = 28, tick = 6;
+    // --- Overall bounding box ---
+    const dim = 30, tick = 5;
     const W = plan.width, H = plan.height;
     const mW = (W / plan.scale).toFixed(1);
     const mH = (H / plan.scale).toFixed(1);
 
-    ctx.strokeStyle = '#b0aba0';
+    ctx.strokeStyle = '#c0bab2';
     ctx.fillStyle   = '#8a877f';
-    ctx.lineWidth   = 0.8;
-    ctx.font = '11px "DM Sans", sans-serif';
-    ctx.setLineDash([2, 3]);
+    ctx.lineWidth   = 0.7;
+    ctx.font = '10px "DM Sans", sans-serif';
 
-    // Bottom (width)
+    ctx.setLineDash([2, 4]);
     ctx.beginPath(); ctx.moveTo(0, H + dim); ctx.lineTo(W, H + dim); ctx.stroke();
     ctx.setLineDash([]);
     ctx.beginPath();
@@ -695,10 +961,9 @@
     ctx.moveTo(W, H + dim - tick); ctx.lineTo(W, H + dim + tick);
     ctx.stroke();
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.fillText(`${mW} m`, W / 2, H + dim + 4);
+    ctx.fillText(`${mW} m`, W / 2, H + dim + 5);
 
-    // Right (height)
-    ctx.setLineDash([2, 3]);
+    ctx.setLineDash([2, 4]);
     ctx.beginPath(); ctx.moveTo(W + dim, 0); ctx.lineTo(W + dim, H); ctx.stroke();
     ctx.setLineDash([]);
     ctx.beginPath();
@@ -706,10 +971,112 @@
     ctx.moveTo(W + dim - tick, H); ctx.lineTo(W + dim + tick, H);
     ctx.stroke();
     ctx.save();
-    ctx.translate(W + dim + 14, H / 2);
+    ctx.translate(W + dim + 13, H / 2);
     ctx.rotate(Math.PI / 2);
     ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
     ctx.fillText(`${mH} m`, 0, 0);
+    ctx.restore();
+
+    // --- Per-wall measurements ---
+    drawPerWallDimensions();
+  }
+
+  function drawPerWallDimensions() {
+    if (!plan?.rooms?.length) return;
+    const S   = plan.scale || 100;
+    const OFF = 14;   // offset from wall edge (plan coords)
+    const TK  = 4;    // tick half-height
+
+    ctx.save();
+
+    // Track already-annotated wall midpoints to avoid duplicates on shared interior walls
+    const seen = new Set();
+
+    for (const room of plan.rooms) {
+      const poly = room.poly;
+      if (!poly || poly.length < 3) continue;
+
+      // Room centroid (to determine outward direction)
+      let rcx = 0, rcy = 0;
+      for (const p of poly) { rcx += p[0]; rcy += p[1]; }
+      rcx /= poly.length; rcy /= poly.length;
+
+      for (let i = 0; i < poly.length; i++) {
+        const p0 = poly[i];
+        const p1 = poly[(i + 1) % poly.length];
+
+        const dx = p1[0] - p0[0];
+        const dy = p1[1] - p0[1];
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len < 25) continue;  // skip walls < 0.25 m
+
+        const meters = (len / S).toFixed(1);
+
+        // Dedup: canonical edge key (sorted endpoints) so p0→p1 == p1→p0
+        const SNAP = 4;
+        const rnd = v => Math.round(v / SNAP) * SNAP;
+        const [x0r, y0r, x1r, y1r] = [rnd(p0[0]), rnd(p0[1]), rnd(p1[0]), rnd(p1[1])];
+        const key = x0r < x1r || (x0r === x1r && y0r <= y1r)
+          ? `${x0r},${y0r},${x1r},${y1r}` : `${x1r},${y1r},${x0r},${y0r}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        // Outward normal away from room centroid
+        const nx0 = -dy / len;
+        const ny0 =  dx / len;
+        const midX = (p0[0] + p1[0]) / 2;
+        const midY = (p0[1] + p1[1]) / 2;
+        const toCenter = (rcx - midX) * nx0 + (rcy - midY) * ny0;
+        const sign = toCenter > 0 ? -1 : 1;
+        const onx = nx0 * sign;
+        const ony = ny0 * sign;
+
+        // Dim line endpoints
+        const ax = p0[0] + onx * OFF;
+        const ay = p0[1] + ony * OFF;
+        const bx = p1[0] + onx * OFF;
+        const by = p1[1] + ony * OFF;
+
+        // Dashed dim line
+        ctx.strokeStyle = '#c0bab2';
+        ctx.lineWidth = 0.7;
+        ctx.setLineDash([2, 3]);
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(bx, by);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Tick marks (perpendicular to dim line = along wall direction)
+        const ux = dx / len, uy = dy / len;
+        ctx.strokeStyle = '#b0aaa2';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(ax - uy * TK, ay + ux * TK);
+        ctx.lineTo(ax + uy * TK, ay - ux * TK);
+        ctx.moveTo(bx - uy * TK, by + ux * TK);
+        ctx.lineTo(bx + uy * TK, by - ux * TK);
+        ctx.stroke();
+
+        // Text rotated along wall, always upright
+        const tmx = (ax + bx) / 2;
+        const tmy = (ay + by) / 2;
+        let angle = Math.atan2(dy, dx);
+        if (angle >  Math.PI / 2) angle -= Math.PI;
+        if (angle < -Math.PI / 2) angle += Math.PI;
+
+        ctx.save();
+        ctx.translate(tmx, tmy);
+        ctx.rotate(angle);
+        ctx.fillStyle = '#7a7570';
+        ctx.font = '8px "DM Sans", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(`${meters} m`, 0, -2);
+        ctx.restore();
+      }
+    }
+
     ctx.restore();
   }
 
@@ -758,6 +1125,26 @@
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+  // ─── Edit mode ───────────────────────────────────────────────────────────────
+  function setEditMode(on) {
+    editMode = on; selectedIdx = -1; dragState = null;
+    canvas.style.cursor = on ? 'default' : 'grab';
+    document.getElementById('fp-edit')?.classList.toggle('active', on);
+    const bar = document.getElementById('fp-edit-bar');
+    if (bar) bar.style.display = on ? 'flex' : 'none';
+    draw();
+  }
+
+  async function saveEdits() {
+    try {
+      await fetch('/floorplan/save', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(plan),
+      });
+      showToast?.('Changes saved');
+    } catch(e) { showToast?.('Save failed: ' + e.message); }
+  }
+
   // ─── 2D / 3D mode toggle ─────────────────────────────────────────────────────
   function setViewMode(mode) {
     viewMode = mode;
@@ -782,8 +1169,8 @@
   }
 
   // ─── Three.js 3D renderer ─────────────────────────────────────────────────────
-  const THREE_CDN  = 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js';
-  const ORBIT_CDN  = 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/controls/OrbitControls.js';
+  const THREE_CDN  = 'https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js';
+  const ORBIT_CDN  = 'https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js';
 
   function loadScript(src, cb) {
     if (document.querySelector(`script[src="${src}"]`)) { cb(); return; }
@@ -925,7 +1312,7 @@
     renderer.setSize(w, h);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.outputEncoding = THREE.sRGBEncoding || 3001;
+    renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.1;
     renderer.setClearColor(0x1a1916);
@@ -1024,19 +1411,65 @@
     ceil.position.set(cx, WALL_H, -cz);
     scene.add(ceil);
 
-    // Walls
-    (p.walls || []).forEach(wall => {
-      const [x1, y1] = wall[0];
-      const [x2, y2] = wall[1];
-      const dx = (x2 - x1) / S, dz = (y2 - y1) / S;
+    // Walls — prefer room polygon (guaranteed closed) over wall array
+    const wallPairs = [];
+    if (p.rooms && p.rooms.length > 0 && p.rooms[0].poly?.length > 2) {
+      const poly = p.rooms[0].poly;
+      for (let i = 0; i < poly.length; i++) {
+        wallPairs.push([poly[i], poly[(i + 1) % poly.length]]);
+      }
+    } else {
+      (p.walls || []).forEach(w => wallPairs.push([w[0], w[1]]));
+    }
+
+    wallPairs.forEach(([p0, p1]) => {
+      const x1 = p0[0] / S, z1 = p0[1] / S;
+      const x2 = p1[0] / S, z2 = p1[1] / S;
+      const dx = x2 - x1, dz = z2 - z1;
       const len = Math.sqrt(dx * dx + dz * dz);
       if (len < 0.05) return;
       const geo  = new THREE.BoxGeometry(len, WALL_H, WALL_T);
       const mesh = new THREE.Mesh(geo, wallMat);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      mesh.position.set((x1 + x2) / (2 * S), WALL_H / 2, -(y1 + y2) / (2 * S));
+      mesh.position.set((x1 + x2) / 2, WALL_H / 2, -(z1 + z2) / 2);
       mesh.rotation.y = -Math.atan2(dz, dx);
+      scene.add(mesh);
+
+      // Baseboard
+      const baseGeo  = new THREE.BoxGeometry(len, 0.1, WALL_T + 0.01);
+      const baseMesh = new THREE.Mesh(baseGeo,
+        new THREE.MeshStandardMaterial({ color: 0xf8f4ee, roughness: 0.8 }));
+      baseMesh.position.set((x1 + x2) / 2, 0.05, -(z1 + z2) / 2);
+      baseMesh.rotation.y = -Math.atan2(dz, dx);
+      scene.add(baseMesh);
+    });
+
+    // Window glass panes
+    const glassMat = new THREE.MeshStandardMaterial({
+      color: 0xadd8f0, transparent: true, opacity: 0.28,
+      roughness: 0.05, metalness: 0.1, side: THREE.DoubleSide,
+    });
+    (p.windows || []).forEach(win => {
+      const ww = (win.width || 80) / S;
+      const wx = win.center[0] / S;
+      const wz = win.center[1] / S;
+      // Find closest wall to orient the glass
+      let bestAngle = 0, bestDist = Infinity;
+      wallPairs.forEach(([p0, p1]) => {
+        const mx = (p0[0] + p1[0]) / (2 * S);
+        const mz = (p0[1] + p1[1]) / (2 * S);
+        const dist = Math.hypot(wx - mx, wz - mz);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestAngle = Math.atan2((p1[1] - p0[1]) / S, (p1[0] - p0[0]) / S);
+        }
+      });
+      const windowH = 1.2, windowY = 0.9;
+      const geo  = new THREE.PlaneGeometry(ww, windowH);
+      const mesh = new THREE.Mesh(geo, glassMat);
+      mesh.position.set(wx, windowY + windowH / 2, -wz);
+      mesh.rotation.y = -bestAngle;
       scene.add(mesh);
     });
 
@@ -1048,37 +1481,95 @@
       const [ox, oy] = o.center;
       const [sw, sd] = o.scale ? [Math.max(o.scale[0]/S, 0.2), Math.max(o.scale[1]/S, 0.2)] : [0.6, 0.6];
       const sh = type.h;
+      const mat = new THREE.MeshStandardMaterial({ color: type.color, roughness: 0.75, metalness: 0.05 });
+      const px = ox / S, pz = -oy / S;
+      const rot = -(o.rot || 0);
 
-      const mat = new THREE.MeshStandardMaterial({ color: type.color, roughness: 0.8, metalness: 0.05 });
-      let geo;
+      const addMesh = (geo, yOffset = 0, overrideMat) => {
+        const m = new THREE.Mesh(geo, overrideMat || mat);
+        m.position.set(px, sh / 2 + yOffset, pz);
+        m.rotation.y = rot;
+        m.castShadow = true; m.receiveShadow = true;
+        scene.add(m);
+        return m;
+      };
+
       if (type.shape === 'cylinder') {
         const r = Math.min(sw, sd) / 2;
-        geo = new THREE.CylinderGeometry(r, r, sh, 16);
+        addMesh(new THREE.CylinderGeometry(r * 0.9, r, sh, 24));
+
+      } else if (label.includes('sofa') || label.includes('couch')) {
+        // Seat
+        addMesh(new THREE.BoxGeometry(sw, sh * 0.55, sd * 0.65), -sh * 0.22);
+        // Back cushion
+        const backMat = new THREE.MeshStandardMaterial({ color: type.color - 0x101010, roughness: 0.8 });
+        addMesh(new THREE.BoxGeometry(sw, sh * 0.75, sd * 0.28), sh * 0.125 - sh/2 + sh * 0.375, backMat);
+        // Arms
+        addMesh(new THREE.BoxGeometry(sd * 0.18, sh * 0.5, sd), 0);
+
+      } else if (label.includes('bed')) {
+        // Mattress
+        const mattressMat = new THREE.MeshStandardMaterial({ color: 0xd8d0e8, roughness: 0.9 });
+        addMesh(new THREE.BoxGeometry(sw, 0.25, sd), sh / 2 - 0.125, mattressMat);
+        // Headboard
+        const hbMat = new THREE.MeshStandardMaterial({ color: 0x8a7888, roughness: 0.6 });
+        const hbMesh = new THREE.Mesh(new THREE.BoxGeometry(sw, sh * 0.85, 0.1), hbMat);
+        hbMesh.position.set(px, sh * 0.425, pz + sd / 2 - 0.05);
+        hbMesh.rotation.y = rot; hbMesh.castShadow = true;
+        scene.add(hbMesh);
+
+      } else if (label.includes('tv') || label.includes('television')) {
+        // Thin screen panel
+        const screenMat = new THREE.MeshStandardMaterial({ color: 0x101018, roughness: 0.2, metalness: 0.5 });
+        addMesh(new THREE.BoxGeometry(sw, sh * 0.55, 0.06), 0, screenMat);
+        // Stand
+        const standMat = new THREE.MeshStandardMaterial({ color: 0x303030, roughness: 0.4 });
+        addMesh(new THREE.BoxGeometry(sw * 0.15, sh * 0.4, 0.15), -sh * 0.28, standMat);
+
       } else {
-        geo = new THREE.BoxGeometry(sw, sh, sd);
+        addMesh(new THREE.BoxGeometry(sw, sh, sd));
       }
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(ox / S, sh / 2, -oy / S);
-      mesh.rotation.y = -(o.rot || 0);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      scene.add(mesh);
 
       // Label sprite
       const sprite = makeLabel(THREE, o.label || key || 'object');
-      sprite.position.set(ox / S, sh + 0.25, -oy / S);
+      sprite.position.set(px, sh + 0.3, pz);
       scene.add(sprite);
     });
 
-    // Door arcs
+    // Doors — panel pivoting from hinge, shown 40° open
     (p.doors || []).forEach(d => {
-      const geo = new THREE.BoxGeometry(d.len / S || 0.9, WALL_H * 0.9, 0.04);
-      const mat = new THREE.MeshStandardMaterial({ color: 0xc8a878, roughness: 0.6 });
-      const mesh = new THREE.Mesh(geo, mat);
+      const len = (d.len || 90) / S;
+      const openAngle = (d.dir || 0) - Math.PI / 2 + Math.PI / 4.5; // ~40° open
       const [hx, hy] = d.hinge;
-      mesh.position.set(hx / S, WALL_H * 0.45, -hy / S);
-      mesh.rotation.y = -(d.dir || 0);
-      scene.add(mesh);
+      const hx3 = hx / S, hz3 = -hy / S;
+
+      // Door panel (offset so one end is at the hinge)
+      const panelMat = new THREE.MeshStandardMaterial({ color: 0xd4b896, roughness: 0.55, metalness: 0.05 });
+      const panelGeo = new THREE.BoxGeometry(len, WALL_H * 0.97, 0.045);
+      const panel = new THREE.Mesh(panelGeo, panelMat);
+      panel.position.set(
+        hx3 + Math.cos(openAngle) * len / 2,
+        WALL_H * 0.485,
+        hz3 - Math.sin(openAngle) * len / 2
+      );
+      panel.rotation.y = -openAngle;
+      panel.castShadow = true;
+      scene.add(panel);
+
+      // Door frame post at hinge
+      const frameMat = new THREE.MeshStandardMaterial({ color: 0xf0ece4, roughness: 0.8 });
+      const hinge3D = new THREE.Mesh(new THREE.BoxGeometry(0.07, WALL_H, 0.12), frameMat);
+      hinge3D.position.set(hx3, WALL_H / 2, hz3);
+      scene.add(hinge3D);
+
+      // "Door" label above the panel
+      const doorSprite = makeLabel(THREE, 'Door');
+      doorSprite.position.set(
+        hx3 + Math.cos(openAngle) * len / 2,
+        WALL_H + 0.3,
+        hz3 - Math.sin(openAngle) * len / 2
+      );
+      scene.add(doorSprite);
     });
 
     // Point light inside room
@@ -1086,8 +1577,10 @@
     roomLight.position.set(cx, WALL_H - 0.3, -cz);
     scene.add(roomLight);
 
-    camera.position.set(cx, Math.max(W, H) * 0.85, cz * 1.4);
-    controls.target.set(cx, 0.8, -cz);
+    // Position camera at a corner looking across the room diagonally
+    const dist = Math.max(W, H) * 0.95;
+    camera.position.set(cx - dist * 0.55, dist * 0.65, -cz + dist * 0.7);
+    controls.target.set(cx, 0.9, -cz);
   }
 
   function makeLabel(THREE, text) {
@@ -1135,5 +1628,5 @@
     requestAnimationFrame(() => onGenerate());
   }
 
-  window.fpViewer = { loadPlan, fitView, resize, autoGenerate };
+  window.fpViewer = { loadPlan, fitView, resize, autoGenerate, spatialLMToFloorPlan, setEditMode };
 })();

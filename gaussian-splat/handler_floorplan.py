@@ -189,8 +189,20 @@ def _ensure_model():
 def _run_roomformer(edge_map):
     """Run RoomFormer on a (H, W) Sobel edge map.
     Returns a list of polygon arrays, each (N, 2) in pixel coordinates."""
-    img     = torch.tensor(edge_map, dtype=torch.float32).unsqueeze(0)  # [1, H, W]
-    samples = [img.to(_device)]
+    from shapely.geometry import Polygon as ShapePoly
+
+    # ResNet-50 backbone expects 3-channel input
+    img = torch.tensor(edge_map, dtype=torch.float32)           # (H, W)
+    img = img.unsqueeze(0).expand(3, -1, -1).contiguous()       # (3, H, W)
+
+    # Use RoomFormer's NestedTensor helper (handles padding + mask for the model)
+    try:
+        from util.misc import nested_tensor_from_tensor_list
+        samples = nested_tensor_from_tensor_list([img]).to(_device)
+    except Exception as e:
+        print(f"[FP] nested_tensor fallback ({e}): wrapping manually")
+        # Manual fallback: NestedTensor-like structure the model also accepts
+        samples = img.unsqueeze(0).to(_device)  # (1, 3, H, W)
 
     with torch.no_grad():
         outputs = _model(samples)
@@ -206,7 +218,6 @@ def _run_roomformer(edge_map):
         corners = np.array((room_coords[fg] * (DENSITY_SIZE - 1)).cpu().tolist(), dtype=np.float32)
         corners = np.around(corners).astype(np.int32)
         if len(corners) >= 4:
-            from shapely.geometry import Polygon as ShapePoly
             area = ShapePoly(corners).area
             # Require at least 0.5% of map area to filter noise
             if area >= DENSITY_SIZE * DENSITY_SIZE * 0.005:
@@ -331,6 +342,72 @@ def _bounding_box_walls(min_xy, range_xy, room_height):
     ]
 
 
+# ── room polygon output ───────────────────────────────────────────────────────
+
+ROOM_RULES = [
+    ("Bathroom",    ["toilet", "bathtub", "shower", "bath", "sink"]),
+    ("Kitchen",     ["refrigerator", "fridge", "oven", "stove", "microwave", "counter"]),
+    ("Bedroom",     ["bed"]),
+    ("Living Room", ["sofa", "couch", "tv", "television", "coffee"]),
+    ("Dining Room", ["dining"]),
+    ("Office",      ["desk", "computer", "monitor", "bookshelf"]),
+]
+
+
+def _classify_room(poly_m, objects, idx):
+    from shapely.geometry import Polygon as ShapePoly, Point
+    try:
+        sp = ShapePoly(poly_m)
+    except Exception:
+        return f"Room {idx + 1}"
+
+    inside_labels = []
+    for o in objects:
+        try:
+            pt = Point(o["center"][0], o["center"][1])
+            if sp.contains(pt) or sp.distance(pt) < 0.5:
+                inside_labels.append(o["class"].lower())
+        except Exception:
+            pass
+
+    for label, keys in ROOM_RULES:
+        if any(k in lbl for k in keys for lbl in inside_labels):
+            return label
+    return f"Room {idx + 1}"
+
+
+def _polys_to_rooms(polys, min_xy, range_xy, objects):
+    """Convert RoomFormer pixel polygons to rooms JSON (metres)."""
+    from shapely.geometry import Polygon as ShapePoly
+    rooms = []
+    size  = float(DENSITY_SIZE - 1)
+    for idx, poly_px in enumerate(polys):
+        poly_m = [
+            [float(pt[0]) / size * range_xy + float(min_xy[0]),
+             float(pt[1]) / size * range_xy + float(min_xy[1])]
+            for pt in poly_px
+        ]
+        if len(poly_m) < 3:
+            continue
+        try:
+            area_m2 = max(1, round(ShapePoly(poly_m).area))
+        except Exception:
+            area_m2 = 1
+        rooms.append({
+            "label": _classify_room(poly_m, objects, idx),
+            "poly":  poly_m,
+            "area":  area_m2,
+        })
+
+    # If 2+ bedrooms, promote largest to Master Bedroom
+    beds = [r for r in rooms if r["label"] == "Bedroom"]
+    if len(beds) >= 2:
+        largest = max(beds, key=lambda r: r["area"])
+        largest["label"] = "Master Bedroom"
+
+    return rooms
+
+
 # ── handler ───────────────────────────────────────────────────────────────────
 
 def handler(job):
@@ -405,8 +482,12 @@ def handler(job):
                 "scale":    [o.get("w", 0.5), o.get("d", 0.5)],
             })
 
-        print(f"[FP] {len(walls)} walls  {len(objects)} objects")
+        # Build room polygons from RoomFormer output (preferred by frontend over DCEL fallback)
+        rooms = _polys_to_rooms(polys, min_xy, range_xy, objects) if polys else []
+
+        print(f"[FP] {len(rooms)} rooms  {len(walls)} walls  {len(objects)} objects")
         return {
+            "rooms":   rooms,
             "walls":   walls,
             "doors":   [],
             "windows": [],

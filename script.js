@@ -132,15 +132,17 @@ function handleScanFile(file) {
   zone.querySelector('.upload-text').innerHTML =
     `<strong>${file.name}</strong><br><span style="color:var(--text-muted)">Click to change</span>`;
 
+  // Hide scanning guide once file is loaded
+  const guide = document.getElementById('scan-guide');
+  if (guide) guide.style.display = 'none';
+
   if (isPly) {
-    // PLY: go straight to floor plan
-    setScanStatus('PLY scan loaded — generating floor plan…');
+    setScanStatus('LiDAR scan loaded — generating floor plan…');
     setView('floorplan');
     setTimeout(() => window.fpViewer?.autoGenerate(file), 400);
   } else {
-    // Video: show Scan button
     document.getElementById('scan-btn').style.display = 'block';
-    setScanStatus('Video ready — click Scan Room to process');
+    setScanStatus('Video ready — click Analyze to generate floor plan');
   }
 }
 
@@ -152,99 +154,117 @@ function setScanStatus(msg, active = true) {
 }
 
 // ─────────────────────────────────────────────
-// Video → Gaussian Splat → Floor Plan pipeline
+// Video → Claude Vision → Floor Plan pipeline
 // ─────────────────────────────────────────────
 async function triggerRoomScan(videoFile) {
   const btn = document.getElementById('scan-btn');
   btn.disabled = true;
-  btn.textContent = 'Scanning…';
+  btn.textContent = 'Analyzing…';
 
   try {
     setScanStatus('Extracting frames from video…');
-    const frames = await extractVideoFrames(videoFile, 60);
-    setScanStatus(`Extracted ${frames.length} frames — submitting to GPU…`);
+    const frames = await extractVideoFrames(videoFile, 20);
+    setScanStatus(`Analyzing ${frames.length} frames with Claude Vision…`);
 
-    // Submit COLMAP scan job
-    const submitRes = await fetch(`${API_URL}/splat/run`, {
+    const res = await fetch(`${API_URL}/claude-floorplan/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input: { images_base64: frames } }),
+      body: JSON.stringify({ frames }),
     });
-    if (submitRes.status === 503) {
-      const err = await submitRes.json();
-      throw new Error(err.error || 'Scan endpoint not configured');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Analysis failed: ${res.status}`);
     }
-    if (!submitRes.ok) throw new Error(`Scan submit failed: ${submitRes.status}`);
-    const { id: jobId } = await submitRes.json();
+    const raw = await res.json();
+    console.log('[claude-fp] raw output:', JSON.stringify(raw).slice(0, 300));
 
-    // Poll scan job
-    const start = Date.now();
-    while (true) {
-      await new Promise(r => setTimeout(r, 5000));
-      const elapsed = Math.round((Date.now() - start) / 1000);
-      setScanStatus(`Building point cloud… ${elapsed}s`);
-
-      const statusRes = await fetch(`${API_URL}/splat/status/${jobId}`);
-      const status = await statusRes.json();
-
-      if (status.status === 'COMPLETED') {
-        setScanStatus('Scan complete — generating floor plan…');
-        window._scanDetectedObjects = status.output.detected_objects || [];
-        console.log('[scan] detected objects:', window._scanDetectedObjects.map(o => o.label));
-        const plyBlob = new Blob(
-          [Uint8Array.from(atob(status.output.ply_base64), c => c.charCodeAt(0))],
-          { type: 'application/octet-stream' }
-        );
-        const plyFile = new File([plyBlob], 'scan.ply');
-        setView('floorplan');
-        setTimeout(() => window.fpViewer?.autoGenerate(plyFile), 400);
-        break;
-      } else if (status.status === 'FAILED') {
-        throw new Error('GS scan failed: ' + JSON.stringify(status.error || ''));
-      }
-    }
+    setView('floorplan');
+    setScanStatus('Floor plan ready', false);
+    setTimeout(() => {
+      const fp = window.fpViewer?.spatialLMToFloorPlan(raw);
+      if (fp) window.fpViewer?.loadPlan(fp);
+    }, 400);
 
   } catch (err) {
-    showToast('Scan error: ' + err.message);
+    showToast('Error: ' + err.message);
     setScanStatus('Error: ' + err.message, false);
     console.error('[scan]', err);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Scan Room & Generate Floor Plan';
+    btn.textContent = 'Analyze with Claude Vision';
   }
 }
 
-// Extract up to maxFrames evenly-spaced frames from a video file
+// Compute a sharpness score for the current canvas frame (higher = sharper)
+function frameSharpness(ctx, w, h) {
+  const step = 4; // sample every 4th pixel for speed
+  const data = ctx.getImageData(0, 0, w, h).data;
+  let sum = 0, count = 0;
+  const rowBytes = w * 4;
+  for (let y = step; y < h - step; y += step) {
+    for (let x = step; x < w - step; x += step) {
+      const i = y * rowBytes + x * 4;
+      const gray    = data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114;
+      const grayUp  = data[i - rowBytes]     * 0.299 + data[i - rowBytes + 1]     * 0.587 + data[i - rowBytes + 2]     * 0.114;
+      const grayDn  = data[i + rowBytes]     * 0.299 + data[i + rowBytes + 1]     * 0.587 + data[i + rowBytes + 2]     * 0.114;
+      sum += Math.abs(gray - grayUp) + Math.abs(gray - grayDn);
+      count++;
+    }
+  }
+  return count ? sum / count : 0;
+}
+
+// Extract maxFrames from video — samples 3× candidates, picks sharpest & most diverse
 function extractVideoFrames(videoFile, maxFrames) {
   return new Promise((resolve, reject) => {
     const video  = document.createElement('video');
     const canvas = document.createElement('canvas');
-    canvas.width = 960; canvas.height = 720;
-    const ctx = canvas.getContext('2d');
-    const frames = [];
-    let i = 0;
+    canvas.width = 1280; canvas.height = 960;
+    const ctx    = canvas.getContext('2d');
 
     video.muted = true;
     video.playsInline = true;
     video.src = URL.createObjectURL(videoFile);
 
     video.onloadedmetadata = () => {
-      const interval = video.duration / maxFrames;
+      const skip      = Math.min(2, video.duration * 0.05);
+      const start     = skip;
+      const end       = Math.max(start + 1, video.duration - skip);
+      const candidates = maxFrames * 3;           // sample 3× more than we need
+      const interval   = (end - start) / candidates;
+
+      const captured = [];
+      let i = 0;
 
       video.onseeked = () => {
-        ctx.drawImage(video, 0, 0, 960, 720);
-        frames.push(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
+        ctx.drawImage(video, 0, 0, 1280, 960);
+        const b64      = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+        const sharp    = frameSharpness(ctx, 1280, 960);
+        const time     = video.currentTime;
+        captured.push({ b64, sharp, time });
         i++;
-        if (i < maxFrames) {
-          video.currentTime = i * interval;
+        if (i < candidates) {
+          video.currentTime = start + i * interval;
         } else {
           URL.revokeObjectURL(video.src);
-          resolve(frames);
+
+          // Divide timeline into maxFrames buckets, pick sharpest from each
+          const bucketSize = (end - start) / maxFrames;
+          const selected = [];
+          for (let b = 0; b < maxFrames; b++) {
+            const bStart = start + b * bucketSize;
+            const bEnd   = bStart + bucketSize;
+            const bucket = captured.filter(f => f.time >= bStart && f.time < bEnd);
+            if (bucket.length === 0) continue;
+            bucket.sort((a, b) => b.sharp - a.sharp);
+            selected.push(bucket[0].b64);
+          }
+          resolve(selected);
         }
       };
 
       video.onerror = reject;
-      video.currentTime = 0;
+      video.currentTime = start;
     };
 
     video.onerror = reject;

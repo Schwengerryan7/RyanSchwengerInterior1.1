@@ -418,6 +418,23 @@ model-viewer {
 .api-input:focus { border-color: var(--text); background: var(--white); }
 .api-note { font-size: 11px; color: var(--text-muted); margin-top: 8px; line-height: 1.5; }
 
+/* Scan guide */
+.scan-guide {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+.scan-guide-title { font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.scan-guide-steps { margin: 0 0 8px 14px; padding: 0; }
+.scan-guide-steps li { margin-bottom: 2px; }
+.scan-guide-lidar { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 6px; }
+.scan-guide-link { color: var(--accent, #6b8cff); font-weight: 600; }
+
 /* Scan status */
 .scan-status {
   font-size: 12px;
@@ -528,6 +545,16 @@ model-viewer {
   width: 100% !important;
   height: 100% !important;
 }
+
+/* Edit bar */
+.fp-edit-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; background: var(--surface, var(--off-white));
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.fp-tool-btn.active { background: var(--accent, #4a90e2); color: #fff; border-color: transparent; }
+.fp-action-btn.danger { color: #e05555; }
+.fp-action-btn.danger:hover { color: #c03333; border-color: #e05555; }
 
 /* Toast */
 .toast {

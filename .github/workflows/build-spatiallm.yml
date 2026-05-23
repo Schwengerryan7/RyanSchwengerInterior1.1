@@ -36,4 +36,6 @@ jobs:
           context: ./gaussian-splat
           file: ./gaussian-splat/Dockerfile.floorplan
           push: true
-          tags: schwengerryan7/floorplan:latest
+          tags: |
+            schwengerryan7/floorplan:latest
+            schwengerryan7/spatiallm:latest

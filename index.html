@@ -59,9 +59,16 @@
           <button class="fp-tool-btn" id="fp-zoom-out" title="Zoom out">−</button>
         </div>
         <div class="fp-actions">
+          <button class="fp-tool-btn fp-edit-btn" id="fp-edit" title="Edit objects">Edit</button>
+          <button class="fp-action-btn" id="fp-load-latest">Load Latest</button>
           <button class="fp-action-btn" id="fp-export-png">Export PNG</button>
           <button class="fp-generate-btn" id="fp-generate">Generate from PLY</button>
         </div>
+      </div>
+      <div class="fp-edit-bar" id="fp-edit-bar" style="display:none">
+        <span id="fp-edit-label" style="font-size:12px;color:var(--text-muted);flex:1">Click an object to select</span>
+        <button class="fp-action-btn" id="fp-edit-save">Save</button>
+        <button class="fp-action-btn danger" id="fp-edit-delete">Delete</button>
       </div>
       <canvas id="fp-canvas"></canvas>
       <div id="fp-3d-container"></div>
@@ -88,13 +95,30 @@
 
     <div class="panel-section">
       <div class="section-label">Room Scan</div>
+
+      <!-- Scanning guide (shown before upload) -->
+      <div class="scan-guide" id="scan-guide">
+        <div class="scan-guide-title">For best results:</div>
+        <ol class="scan-guide-steps">
+          <li>Move slowly around all 4 walls</li>
+          <li>Pause on each piece of furniture</li>
+          <li>Capture the door and windows clearly</li>
+          <li>Keep the phone steady — avoid fast pans</li>
+        </ol>
+        <div class="scan-guide-lidar">
+          <strong>iPhone 12 Pro+ / iPad Pro?</strong> Use
+          <span class="scan-guide-link">Scaniverse</span> (free) for LiDAR accuracy —
+          export as .ply and upload that instead.
+        </div>
+      </div>
+
       <div class="upload-zone" id="scan-zone">
         <div class="upload-icon">🎥</div>
-        <div class="upload-text"><strong>Click to upload</strong> or drag & drop<br>.mp4 / .mov video or .ply scan</div>
+        <div class="upload-text"><strong>Click to upload</strong> or drag & drop<br>Video (.mp4 / .mov) or LiDAR scan (.ply)</div>
       </div>
       <input type="file" id="scan-input" accept=".mp4,.mov,.avi,.ply" style="display:none">
       <button class="render-btn" id="scan-btn" style="margin-top:12px;display:none">
-        Scan Room &amp; Generate Floor Plan
+        Analyze with Claude Vision
       </button>
       <div class="scan-status" id="scan-status"></div>
     </div>
