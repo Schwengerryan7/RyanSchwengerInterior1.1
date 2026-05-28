@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Floor Plan Test</title>
+<style>
+  body { margin: 0; background: #1a1916; display: flex; gap: 10px; padding: 10px; font-family: sans-serif; }
+  canvas { border: 1px solid #444; }
+  #log { color: #0f0; font-size: 11px; white-space: pre; padding: 8px; max-height: 400px; overflow-y: auto; }
+</style>
+</head>
+<body>
+<div>
+  <div style="color:#fff;margin-bottom:4px">2D Floor Plan</div>
+  <canvas id="c2d" width="500" height="400"></canvas>
+</div>
+<div>
+  <div style="color:#fff;margin-bottom:4px">3D View</div>
+  <canvas id="c3d" width="500" height="400"></canvas>
+</div>
+<div style="flex:1">
+  <div style="color:#fff;margin-bottom:4px">Log</div>
+  <div id="log"></div>
+</div>
+
+<script>
+const log = s => { document.getElementById('log').textContent += s + '\n'; console.log(s); };
+
+async function main() {
+  // 1. Fetch floor plan
+  log('Fetching /floorplan/latest ...');
+  const res  = await fetch('/floorplan/latest');
+  const data = await res.json();
+  log(`Got: ${data.walls.length} walls, ${(data.rooms||[]).length} rooms`);
+  log(`bounds: ${JSON.stringify(data.bounds)}`);
+
+  // 2. Normalize scale (COLMAP arbitrary units → ≤12m)
+  const b = data.bounds;
+  const rawMax = Math.max(b.width, b.height);
+  const norm   = rawMax > 12 ? 12 / rawMax : 1;
+  const S = 80, pad = 30;
+
+  const tx = x => (x - b.min_x) * norm * S + pad;
+  const ty = y => (y - b.min_y) * norm * S + pad;
+  const W  = b.width  * norm * S + pad * 2;
+  const H  = b.height * norm * S + pad * 2;
+  log(`Normalized: ${(b.width*norm).toFixed(2)}m x ${(b.height*norm).toFixed(2)}m  canvas=${W.toFixed(0)}x${H.toFixed(0)}`);
+
+  // 3. Draw 2D
+  const canvas = document.getElementById('c2d');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#f7f6f4';
+  ctx.fillRect(0, 0, W, H);
+
+  // Room fills
+  const COLORS = ['#f0e8d8','#d8e8d0','#d8d8f0','#d8f0ec'];
+  (data.rooms || []).forEach((r, i) => {
+    const poly = r.poly;
+    log(`Room "${r.label}": ${poly.length} vertices`);
+    ctx.beginPath();
+    ctx.moveTo(tx(poly[0][0]), ty(poly[0][1]));
+    poly.slice(1).forEach(p => ctx.lineTo(tx(p[0]), ty(p[1])));
+    ctx.closePath();
+    ctx.fillStyle = COLORS[i % COLORS.length];
+    ctx.fill();
+    // Label
+    const cx = poly.reduce((s,p)=>s+p[0],0)/poly.length;
+    const cy = poly.reduce((s,p)=>s+p[1],0)/poly.length;
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(r.label, tx(cx), ty(cy));
+  });
+
+  // Walls
+  ctx.strokeStyle = '#2a2825';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  data.walls.forEach(w => {
+    ctx.beginPath();
+    ctx.moveTo(tx(w.start[0]), ty(w.start[1]));
+    ctx.lineTo(tx(w.end[0]),   ty(w.end[1]));
+    ctx.stroke();
+  });
+
+  log('2D drawn OK');
+
+  // 4. Draw 3D with Three.js
+  await loadScript('https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js');
+  log('Three.js loaded, version: ' + THREE.REVISION);
+
+  const c3d = document.getElementById('c3d');
+  const renderer = new THREE.WebGLRenderer({ canvas: c3d, antialias: true });
+  renderer.setSize(500, 400);
+  renderer.setClearColor(0x222220);
+  renderer.shadowMap.enabled = true;
+
+  const scene  = new THREE.Scene();
+  scene.background = new THREE.Color(0x222220);
+  const camera = new THREE.PerspectiveCamera(60, 500/400, 0.1, 200);
+
+  // Room dims in meters
+  const RW = b.width  * norm;
+  const RH = b.height * norm;
+  const cx3 = RW / 2, cz3 = RH / 2;
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0xfff5e0, 0.7));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+  sun.position.set(cx3, 8, -cz3); sun.castShadow = true; scene.add(sun);
+
+  // Floor
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(RW, RH),
+    new THREE.MeshStandardMaterial({ color: 0xd4c4a8, roughness: 0.9 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(cx3, 0, -cz3);
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  // Walls from polygon
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0xf0ece4, roughness: 0.9 });
+  const WALL_H = 2.6, WALL_T = 0.15;
+  data.walls.forEach(w => {
+    const x1 = (w.start[0] - b.min_x) * norm;
+    const z1 = (w.start[1] - b.min_y) * norm;
+    const x2 = (w.end[0]   - b.min_x) * norm;
+    const z2 = (w.end[1]   - b.min_y) * norm;
+    const dx = x2-x1, dz = z2-z1;
+    const len = Math.sqrt(dx*dx + dz*dz);
+    if (len < 0.05) return;
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(len, WALL_H, WALL_T), wallMat);
+    mesh.position.set((x1+x2)/2, WALL_H/2, -((z1+z2)/2));
+    mesh.rotation.y = -Math.atan2(dz, dx);
+    mesh.castShadow = true;
+    scene.add(mesh);
+  });
+
+  log(`3D: room ${RW.toFixed(2)}x${RH.toFixed(2)}m, ${data.walls.length} walls`);
+
+  // Camera: orbit angle above room center
+  camera.position.set(cx3, RH * 0.9, cz3 * 2);
+  camera.lookAt(cx3, 0, -cz3);
+
+  // Simple orbit on drag
+  let dragging = false, lastX = 0, angle = 0;
+  c3d.addEventListener('mousedown', e => { dragging = true; lastX = e.clientX; });
+  c3d.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    angle += (e.clientX - lastX) * 0.01; lastX = e.clientX;
+    const r = RH * 1.8;
+    camera.position.set(cx3 + Math.sin(angle)*r, RH * 0.9, -cz3 + Math.cos(angle)*r);
+    camera.lookAt(cx3, 0, -cz3);
+  });
+  c3d.addEventListener('mouseup', () => dragging = false);
+
+  function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+  }
+  animate();
+  log('3D running — drag to orbit');
+}
+
+function loadScript(src) {
+  return new Promise(resolve => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = resolve; document.head.appendChild(s);
+  });
+}
+
+main().catch(e => log('ERROR: ' + e.message));
+</script>
+</body>
+</html>

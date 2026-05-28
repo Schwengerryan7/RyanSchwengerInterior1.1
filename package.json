@@ -20,6 +20,7 @@
   },
   "homepage": "https://github.com/schwengerryan7-hue/RyanSchwengerInterior1.1#readme",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.98.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "node-fetch": "^3.3.2"
